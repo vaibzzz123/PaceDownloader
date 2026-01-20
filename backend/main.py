@@ -1,15 +1,22 @@
 import json
 import re
+import shutil
 import zlib
 import sys
 from io import BytesIO
 from pathlib import Path
+import os
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from git import Repo
 from openpyxl import load_workbook
+from dotenv import load_dotenv
+
+load_dotenv()
+
+global media_data_location
 
 
 def get_session_with_retries() -> requests.Session:
@@ -105,6 +112,20 @@ def fetch_google_sheet_xlsx(sheet_id: str) -> dict[str, list[dict]]:
     return all_sheets
 
 
+def initialize_media(media_data_location: Path):
+    """Copy episode metadata files from the cloned repo to the media data location."""
+    source_dir = Path("data/eps-metadata/One Pace")
+
+    if not source_dir.exists():
+        refresh_episode_metadata()
+
+    media_data_location.mkdir(parents=True, exist_ok=True)
+
+    shutil.copytree(source_dir, media_data_location, dirs_exist_ok=True)
+
+    print(f"Copied metadata from '{source_dir}' to '{media_data_location}'")
+
+
 def refresh_onepace_sheet():
     """Download all sheets from the One Pace Google Sheet."""
     sheet_id = "1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA"
@@ -126,7 +147,6 @@ def refresh_onepace_sheet():
 
     return all_sheets
 
-
 if __name__ == "__main__":
     # if len(sys.argv) != 2:
     #     print(f"Usage: {sys.argv[0]} <filepath>")
@@ -135,5 +155,7 @@ if __name__ == "__main__":
     # filepath = sys.argv[1]
     # checksum = calculate_crc32(filepath)
     # print(f"CRC32: {checksum}")
+    media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
+    initialize_media(media_data_location)
     # refresh_episode_metadata()
-    refresh_onepace_sheet()
+    # refresh_onepace_sheet()
