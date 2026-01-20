@@ -3,6 +3,7 @@
 import json
 import re
 import shutil
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -28,13 +29,25 @@ def get_session_with_retries() -> requests.Session:
     return session
 
 
-def refresh_episode_metadata():
+def refresh_episode_metadata(force: bool = False, max_age_hours: int = 24):
     """Clone or pull the One Pace Jellyfin metadata repository."""
     repo_path = Path("data/eps-metadata")
+
     if (repo_path / ".git").exists():
         repo = Repo(repo_path)
+
+        if not force:
+            fetch_head = repo_path / ".git" / "FETCH_HEAD"
+            if fetch_head.exists():
+                fetch_age_hours = (time.time() - fetch_head.stat().st_mtime) / 3600
+                if fetch_age_hours < max_age_hours:
+                    print(f"Episode metadata is {fetch_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override.")
+                    return
+
+        print("Pulling latest episode metadata...")
         repo.remotes.origin.pull()
     else:
+        print("Cloning One Pace Jellyfin metadata repository...")
         Repo.clone_from("https://github.com/tissla/one-pace-jellyfin", repo_path)
 
 
@@ -127,17 +140,27 @@ def initialize_media(media_data_location: Path):
     print(f"Copied metadata from '{source_dir}' to '{media_data_location}'")
 
 
-def refresh_onepace_sheet():
+def refresh_onepace_sheet(force: bool = False, max_age_hours: int = 24):
     """Download all sheets from the One Pace Google Sheet."""
+    output_dir = Path("data/sheets")
+
+    if not force and output_dir.exists():
+        json_files = list(output_dir.glob("*.json"))
+        if json_files:
+            newest_file = max(json_files, key=lambda f: f.stat().st_mtime)
+            file_age_hours = (time.time() - newest_file.stat().st_mtime) / 3600
+
+            if file_age_hours < max_age_hours:
+                print(f"Sheets data is {file_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override.")
+                return
+
     sheet_id = "1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA"
 
     all_sheets = fetch_google_sheet_xlsx(sheet_id)
 
-    output_dir = Path("data/sheets")
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for sheet_name, rows in all_sheets.items():
-        # Sanitize filename
         safe_name = sheet_name.replace("/", "-").replace(" ", "_").lower()
         output_path = output_dir / f"{safe_name}.json"
 
@@ -145,5 +168,3 @@ def refresh_onepace_sheet():
             json.dump(rows, f, indent=2, default=str)
 
         print(f"Downloaded {len(rows)} rows to {output_path}")
-
-    return all_sheets
