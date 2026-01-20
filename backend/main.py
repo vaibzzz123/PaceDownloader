@@ -327,8 +327,15 @@ def parse_nfo_files(metadata_dir: Path) -> list[dict]:
         metadata_dir.glob("Season *"),
         key=lambda p: int(p.name.split()[-1])
     )
+    # Skip extended episode files that are handled by the normal episode's extended fields
+    skip_files = {
+        "One Pace - S06E05 - Live (Extended)",
+    }
+
     for season_dir in season_dirs:
         for nfo_file in sorted(season_dir.glob("One Pace - S*E* - *.nfo")):
+            if nfo_file.stem in skip_files:
+                continue
             match = filename_pattern.match(nfo_file.stem)
             if match:
                 episodes.append({
@@ -341,7 +348,7 @@ def parse_nfo_files(metadata_dir: Path) -> list[dict]:
     return episodes
 
 
-def build_episode_mapping() -> list[dict]:
+def build_episode_mapping(media_location: Path) -> list[dict]:
     """
     Build a complete mapping of all One Pace episodes with metadata from NFO files
     and torrent information from Google Sheets.
@@ -352,12 +359,15 @@ def build_episode_mapping() -> list[dict]:
     3. Parses NFO files to get episode metadata (title, season, episode number)
     4. Joins the data to create a unified episode mapping
 
+    Args:
+        media_location: Base path where media files are/will be stored
+
     Returns:
         List of dictionaries, each containing:
         - ep_name: str - Episode name (NFO filename without extension)
         - season: int - Season number
         - ep_number: int - Episode number within season
-        - file_location_media: str - Relative path to media file
+        - file_location_media: str - Absolute path to media file
         - torrent_link: str | None - Nyaa torrent link
         - crc32: str | None - CRC32 checksum of the MKV file
         - torrent_link_extended: str | None - Extended version torrent link
@@ -418,8 +428,8 @@ def build_episode_mapping() -> list[dict]:
                 torrent_link_extended = mkv_crc32_ext.get("link")
                 crc32_extended = mkv_crc32_ext.get("text")
 
-        # Build file location path
-        file_location = f"Season {season_num}/{nfo['filename']}.mkv"
+        # Build absolute file location path
+        file_location = str(media_location.resolve() / f"Season {season_num}" / f"{nfo['filename']}.mkv")
 
         results.append({
             "ep_name": nfo["filename"],
@@ -446,8 +456,8 @@ if __name__ == "__main__":
     media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
     # initialize_media(media_data_location)
     # refresh_episode_metadata()
-    refresh_onepace_sheet()
-    metadata_mapping = build_episode_mapping()
+    # refresh_onepace_sheet()
+    metadata_mapping = build_episode_mapping(media_data_location)
     print(f"Built metadata mapping for {len(metadata_mapping)} episodes.")
     with open(media_data_location / "episode_metadata.json", "w") as f:
         json.dump(metadata_mapping, f, indent=2)
