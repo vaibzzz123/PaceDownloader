@@ -211,6 +211,7 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
 
     Returns:
         List of dictionaries, each containing:
+        - id: int - Sequential episode ID (1-indexed)
         - ep_name: str - Episode name (NFO filename without extension)
         - season: int - Season number
         - ep_number: int - Episode number within season
@@ -244,7 +245,7 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
     # Step 4: Build mappings
     results = []
 
-    for nfo in nfo_episodes:
+    for episode_id, nfo in enumerate(nfo_episodes, start=1):
         season_num = nfo["season"]
         ep_num = nfo["episode"]
 
@@ -279,6 +280,7 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
         file_location = str(media_location.resolve() / f"Season {season_num}" / f"{nfo['filename']}.mkv")
 
         results.append({
+            "id": episode_id,
             "ep_name": nfo["filename"],
             "season": season_num,
             "ep_number": ep_num,
