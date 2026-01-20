@@ -140,3 +140,7 @@ vite.config.ts.timestamp-*
 
 # Ignore metadata Git repo inside this repo, as well as downloaded data files
 backend/data/*
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
