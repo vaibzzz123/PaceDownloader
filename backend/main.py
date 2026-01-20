@@ -3,7 +3,6 @@ import re
 import shutil
 import zlib
 import sys
-import xml.etree.ElementTree as ET
 from io import BytesIO
 from pathlib import Path
 import os
@@ -52,8 +51,13 @@ def refresh_episode_metadata():
     else:
         Repo.clone_from("https://github.com/tissla/one-pace-jellyfin", repo_path)
 
-def fetch_google_sheet_xlsx(sheet_id: str) -> dict[str, list[dict]]:
-    """Fetch all sheets from a Google Sheet as XLSX to preserve hyperlinks."""
+def fetch_google_sheet_xlsx(sheet_id: str, save_xlsx: bool = False) -> dict[str, list[dict]]:
+    """Fetch all sheets from a Google Sheet as XLSX to preserve hyperlinks.
+
+    Args:
+        sheet_id: The Google Sheet ID to fetch
+        save_xlsx: If True, save a copy of the downloaded XLSX file for debugging
+    """
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
 
     session = get_session_with_retries()
@@ -64,9 +68,16 @@ def fetch_google_sheet_xlsx(sheet_id: str) -> dict[str, list[dict]]:
     chunks = []
     for chunk in response.iter_content(chunk_size=8192):
         chunks.append(chunk)
-    xlsx_data = BytesIO(b"".join(chunks))
+    xlsx_bytes = b"".join(chunks)
 
-    workbook = load_workbook(xlsx_data)
+    # Optionally save a copy for debugging
+    if save_xlsx:
+        sheets_dir = Path("data/sheets")
+        sheets_dir.mkdir(parents=True, exist_ok=True)
+        with open(sheets_dir / "onepace_sheets.xlsx", "wb") as f:
+            f.write(xlsx_bytes)
+
+    workbook = load_workbook(BytesIO(xlsx_bytes))
     all_sheets = {}
 
     for sheet_name in workbook.sheetnames:
@@ -230,6 +241,10 @@ def find_arc_json_file(sheets_dir: Path, json_filename: str) -> Path | None:
 
     Some arc names in arc_overview.json don't exactly match the sheet tab names,
     e.g., "The Adventures of the Straw Hats" vs "The Adventures of the Straw Hat".
+
+    Note: This is caused by a Google Sheets XLSX export bug that corrupts sheet tab
+    names - dropping trailing 's' and apostrophes. The arc_overview cell content is
+    correct, but the exported tab names lose these characters.
     """
     json_path = sheets_dir / json_filename
     if json_path.exists():
@@ -294,7 +309,9 @@ def load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tup
 
 def parse_nfo_files(metadata_dir: Path) -> list[dict]:
     """
-    Parse all episode NFO files and extract metadata.
+    Parse all episode NFO files and extract metadata from filenames.
+
+    Filename format: "One Pace - S##E## - Title.nfo"
 
     Args:
         metadata_dir: Path to the "One Pace" metadata directory
@@ -303,21 +320,23 @@ def parse_nfo_files(metadata_dir: Path) -> list[dict]:
         List of dicts with keys: filename, season, episode, title
     """
     episodes = []
+    filename_pattern = re.compile(r"One Pace - S(\d+)E(\d+) - (.+)")
 
-    for season_dir in sorted(metadata_dir.glob("Season *")):
+    # Sort season dirs numerically (Season 2 before Season 10)
+    season_dirs = sorted(
+        metadata_dir.glob("Season *"),
+        key=lambda p: int(p.name.split()[-1])
+    )
+    for season_dir in season_dirs:
         for nfo_file in sorted(season_dir.glob("One Pace - S*E* - *.nfo")):
-            try:
-                tree = ET.parse(nfo_file)
-                root = tree.getroot()
-
+            match = filename_pattern.match(nfo_file.stem)
+            if match:
                 episodes.append({
-                    "filename": nfo_file.stem,  # Without .nfo extension
-                    "season": int(root.findtext("season")),
-                    "episode": int(root.findtext("episode")),
-                    "title": root.findtext("title"),
+                    "filename": nfo_file.stem,
+                    "season": int(match.group(1)),
+                    "episode": int(match.group(2)),
+                    "title": match.group(3),
                 })
-            except Exception as e:
-                print(f"Error parsing {nfo_file}: {e}")
 
     return episodes
 
@@ -426,8 +445,10 @@ if __name__ == "__main__":
     # print(f"CRC32: {checksum}")
     media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
     # initialize_media(media_data_location)
+    # refresh_episode_metadata()
+    refresh_onepace_sheet()
     metadata_mapping = build_episode_mapping()
     print(f"Built metadata mapping for {len(metadata_mapping)} episodes.")
-    print(metadata_mapping)
-    # refresh_episode_metadata()
-    # refresh_onepace_sheet()
+    with open(media_data_location / "episode_metadata.json", "w") as f:
+        json.dump(metadata_mapping, f, indent=2)
+    # print(metadata_mapping)
