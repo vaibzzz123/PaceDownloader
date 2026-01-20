@@ -1,3 +1,10 @@
+certifi==2026.1.4
+charset-normalizer==3.4.4
+et_xmlfile==2.0.0
 gitdb==4.0.12
 GitPython==3.1.46
+idna==3.11
+openpyxl==3.1.5
+requests==2.32.5
 smmap==5.0.2
+urllib3==2.6.3
