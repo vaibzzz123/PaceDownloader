@@ -41,7 +41,9 @@ def refresh_episode_metadata(force: bool = False, max_age_hours: int = 24):
             if fetch_head.exists():
                 fetch_age_hours = (time.time() - fetch_head.stat().st_mtime) / 3600
                 if fetch_age_hours < max_age_hours:
-                    print(f"Episode metadata is {fetch_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override.")
+                    print(
+                        f"Episode metadata is {fetch_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override."
+                    )
                     return
 
         print("Pulling latest episode metadata...")
@@ -51,7 +53,9 @@ def refresh_episode_metadata(force: bool = False, max_age_hours: int = 24):
         Repo.clone_from("https://github.com/tissla/one-pace-jellyfin", repo_path)
 
 
-def fetch_google_sheet_xlsx(sheet_id: str, save_xlsx: bool = False) -> dict[str, list[dict]]:
+def fetch_google_sheet_xlsx(
+    sheet_id: str, save_xlsx: bool = False
+) -> dict[str, list[dict]]:
     """Fetch all sheets from a Google Sheet as XLSX to preserve hyperlinks.
 
     Args:
@@ -100,15 +104,25 @@ def fetch_google_sheet_xlsx(sheet_id: str, save_xlsx: bool = False) -> dict[str,
                     continue
                 # Check if cell has a hyperlink object
                 if cell.hyperlink:
-                    row_dict[header] = {"text": cell.value, "link": cell.hyperlink.target}
+                    row_dict[header] = {
+                        "text": cell.value,
+                        "link": cell.hyperlink.target,
+                    }
                     has_data = True
                 # Check if cell value is a =HYPERLINK() formula string
-                elif isinstance(cell.value, str) and cell.value.startswith("=HYPERLINK"):
+                elif isinstance(cell.value, str) and cell.value.startswith(
+                    "=HYPERLINK"
+                ):
                     # Pattern to parse =HYPERLINK("url","text") or =HYPERLINK("url", "text") formulas
-                    HYPERLINK_PATTERN = re.compile(r'=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)')
+                    HYPERLINK_PATTERN = re.compile(
+                        r'=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)'
+                    )
                     match = HYPERLINK_PATTERN.match(cell.value)
                     if match:
-                        row_dict[header] = {"text": match.group(2), "link": match.group(1)}
+                        row_dict[header] = {
+                            "text": match.group(2),
+                            "link": match.group(1),
+                        }
                         has_data = True
                     else:
                         row_dict[header] = cell.value
@@ -151,7 +165,9 @@ def refresh_onepace_sheet(force: bool = False, max_age_hours: int = 24):
             file_age_hours = (time.time() - newest_file.stat().st_mtime) / 3600
 
             if file_age_hours < max_age_hours:
-                print(f"Sheets data is {file_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override.")
+                print(
+                    f"Sheets data is {file_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override."
+                )
                 return
 
     sheet_id = "1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA"

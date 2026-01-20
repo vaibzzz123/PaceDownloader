@@ -225,10 +225,10 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
     sheets_dir = Path("data/sheets")
 
     # Ensure data is available
-    if not metadata_dir.exists():
-        refresh_episode_metadata()
-    if not sheets_dir.exists():
-        refresh_onepace_sheet()
+    # if not metadata_dir.exists():
+    refresh_episode_metadata()
+    # if not sheets_dir.exists():
+    refresh_onepace_sheet()
 
     # Step 1: Load and parse arc overview
     with open(sheets_dir / "arc_overview.json") as f:
