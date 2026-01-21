@@ -1,7 +1,11 @@
 import os
 import sqlite3
 
-con = sqlite3.connect("backend.db")
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
+con = sqlite3.connect("backend.sqlite3")
 cur = con.cursor()
 
 SETTINGS_FIELDS = [
@@ -18,6 +22,7 @@ SETTINGS_FIELDS = [
 
 
 def initialize_db():
+    logger.debug("Creating settings table if not exists")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS settings (
             singleton INTEGER PRIMARY KEY CHECK (singleton = 1) DEFAULT 1,
@@ -36,6 +41,7 @@ def initialize_db():
         INSERT OR IGNORE INTO settings (singleton) VALUES (1)
     """)
     con.commit()
+    logger.info("Database initialized")
 
 
 def _get_env_value(field: str):
@@ -44,6 +50,7 @@ def _get_env_value(field: str):
     env_val = os.environ.get(env_name)
     if env_val is None:
         return None
+    logger.debug("Environment override for %s: %s", field, env_val if field != "qbt_password" else "***")
     if field == "prefer_extended":
         return env_val.lower() in ("1", "true", "yes")
     return env_val
@@ -57,9 +64,11 @@ def get_settings() -> dict | None:
       - value: the effective value (env override if set, else db value)
       - env_override: True if an environment variable is overriding the db value
     """
+    logger.debug("Fetching settings from database")
     cur.execute("SELECT * FROM settings WHERE singleton = 1")
     row = cur.fetchone()
     if not row:
+        logger.warning("No settings found in database")
         return None
 
     columns = [desc[0] for desc in cur.description]
@@ -120,3 +129,4 @@ def save_settings(
         ),
     )
     con.commit()
+    logger.info("Settings saved successfully")

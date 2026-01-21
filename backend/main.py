@@ -4,6 +4,19 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+load_dotenv()
+
+from db import get_settings, initialize_db
+from logging_config import get_logger, setup_logging
+
+# Initialize database and logging before other imports that may log
+initialize_db()
+settings = get_settings()
+log_level = settings["log_level"]["value"] if settings else "INFO"
+setup_logging(log_level)
+
+logger = get_logger(__name__)
+
 from data_sources import (
     initialize_media,
     refresh_episode_metadata,
@@ -11,8 +24,6 @@ from data_sources import (
 )
 from metadata import build_episode_mapping, save_metadata_mapping
 from nyaa_utils import extract_nyaa_id, get_magnet_link, get_nyaa_resource_for_episode
-
-load_dotenv()
 
 
 def calculate_crc32(filepath: str) -> str:
@@ -25,18 +36,19 @@ def calculate_crc32(filepath: str) -> str:
 
 
 if __name__ == "__main__":
+    logger.info("Starting One Pace Jellyfin backend")
     media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
     initialize_media(media_data_location)
     metadata_mapping = build_episode_mapping(media_data_location)
-    print(f"Built metadata mapping for {len(metadata_mapping)} episodes.")
+    logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
     # example_episode = metadata_mapping[0]
     example_episode = metadata_mapping[0]
     nyaa_resource = get_nyaa_resource_for_episode(example_episode)
-    print(get_magnet_link(nyaa_resource))
+    logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
     example_episode = metadata_mapping[33]
     nyaa_resource = get_nyaa_resource_for_episode(example_episode)
-    print(get_magnet_link(nyaa_resource))
-    # print(example_episode)
+    logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
+    # logger.debug(example_episode)
     # nyaa_id = extract_nyaa_id(example_episode)
-    # print(f"Example episode NyaaSi ID: {nyaa_id}")
+    # logger.debug("Example episode NyaaSi ID: %s", nyaa_id)
     # save_metadata_mapping(metadata_mapping, media_data_location)

@@ -13,6 +13,10 @@ from urllib3.util.retry import Retry
 from git import Repo
 from openpyxl import load_workbook
 
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 def get_session_with_retries() -> requests.Session:
     """Create a requests session with retry logic."""
@@ -41,16 +45,20 @@ def refresh_episode_metadata(force: bool = False, max_age_hours: int = 24):
             if fetch_head.exists():
                 fetch_age_hours = (time.time() - fetch_head.stat().st_mtime) / 3600
                 if fetch_age_hours < max_age_hours:
-                    print(
-                        f"Episode metadata is {fetch_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override."
+                    logger.info(
+                        "Episode metadata is %.1f hours old (max: %d), skipping refresh. Use force=True to override.",
+                        fetch_age_hours,
+                        max_age_hours,
                     )
                     return
 
-        print("Pulling latest episode metadata...")
+        logger.info("Pulling latest episode metadata")
         repo.remotes.origin.pull()
+        logger.debug("Git pull completed for %s", repo_path)
     else:
-        print("Cloning One Pace Jellyfin metadata repository...")
+        logger.info("Cloning One Pace Jellyfin metadata repository")
         Repo.clone_from("https://github.com/tissla/one-pace-jellyfin", repo_path)
+        logger.debug("Git clone completed to %s", repo_path)
 
 
 def fetch_google_sheet_xlsx(
@@ -63,10 +71,12 @@ def fetch_google_sheet_xlsx(
         save_xlsx: If True, save a copy of the downloaded XLSX file for debugging
     """
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
+    logger.debug("Fetching Google Sheet: %s", sheet_id)
 
     session = get_session_with_retries()
     response = session.get(url, timeout=300, stream=True)
     response.raise_for_status()
+    logger.debug("Google Sheets response status: %d", response.status_code)
 
     # Download in chunks to handle large files better
     chunks = []
@@ -145,13 +155,14 @@ def initialize_media(media_data_location: Path):
     source_dir = Path("data/eps-metadata/One Pace")
 
     if not source_dir.exists():
+        logger.debug("Source directory not found, refreshing episode metadata")
         refresh_episode_metadata()
 
     media_data_location.mkdir(parents=True, exist_ok=True)
 
     shutil.copytree(source_dir, media_data_location, dirs_exist_ok=True)
 
-    print(f"Copied metadata from '{source_dir}' to '{media_data_location}'")
+    logger.info("Copied metadata from '%s' to '%s'", source_dir, media_data_location)
 
 
 def refresh_onepace_sheet(force: bool = False, max_age_hours: int = 24):
@@ -165,8 +176,10 @@ def refresh_onepace_sheet(force: bool = False, max_age_hours: int = 24):
             file_age_hours = (time.time() - newest_file.stat().st_mtime) / 3600
 
             if file_age_hours < max_age_hours:
-                print(
-                    f"Sheets data is {file_age_hours:.1f} hours old (max: {max_age_hours}). Skipping refresh. Use force=True to override."
+                logger.info(
+                    "Sheets data is %.1f hours old (max: %d), skipping refresh",
+                    file_age_hours,
+                    max_age_hours,
                 )
                 return
 
@@ -183,4 +196,4 @@ def refresh_onepace_sheet(force: bool = False, max_age_hours: int = 24):
         with open(output_path, "w") as f:
             json.dump(rows, f, indent=2, default=str)
 
-        print(f"Downloaded {len(rows)} rows to {output_path}")
+        logger.info("Downloaded %d rows to %s", len(rows), output_path)
