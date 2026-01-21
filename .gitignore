@@ -144,3 +144,6 @@ backend/data/*
 # Ignore Python cache files
 __pycache__/
 *.py[cod]
+
+# SQLite database files
+*.sqlite3

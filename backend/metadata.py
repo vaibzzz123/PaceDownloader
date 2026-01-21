@@ -5,6 +5,9 @@ import re
 from pathlib import Path
 
 from data_sources import refresh_episode_metadata, refresh_onepace_sheet
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
@@ -34,6 +37,7 @@ def build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
     sorted_arcs = sorted(valid_arcs, key=lambda x: float(x["No."]))
 
     season_map = {}
+    logger.debug("Building season map from %d valid arcs", len(sorted_arcs))
     for season_num, arc in enumerate(sorted_arcs, start=1):
         # Handle both dict format {"text": "...", "link": ...} and plain string
         arc_name_raw = arc["Arcs"]["text"] if isinstance(arc["Arcs"], dict) else arc["Arcs"]
@@ -131,7 +135,11 @@ def load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tup
         json_path = find_arc_json_file(sheets_dir, arc_info["json_filename"])
 
         if json_path is None:
-            print(f"Warning: Missing JSON file for {arc_info['arc_name']}: {arc_info['json_filename']}")
+            logger.warning(
+                "Missing JSON file for arc '%s': %s",
+                arc_info["arc_name"],
+                arc_info["json_filename"],
+            )
             continue
 
         with open(json_path) as f:
@@ -244,6 +252,7 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
 
     # Step 4: Build mappings
     results = []
+    logger.debug("Processing %d NFO episodes", len(nfo_episodes))
 
     for episode_id, nfo in enumerate(nfo_episodes, start=1):
         season_num = nfo["season"]
@@ -252,7 +261,7 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
         # Get arc info for this season
         arc_info = season_map.get(season_num)
         if arc_info is None:
-            print(f"Warning: No arc mapping for season {season_num}")
+            logger.warning("No arc mapping for season %d", season_num)
             continue
 
         # Look up sheet data
@@ -300,4 +309,4 @@ def save_metadata_mapping(mapping: list[dict], media_location: Path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(mapping, f, indent=2)
-    print(f"Saved episode metadata mapping to {output_path}")
+    logger.info("Saved episode metadata mapping to %s", output_path)
