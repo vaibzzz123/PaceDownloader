@@ -1,6 +1,8 @@
 import requests
 from requests.exceptions import RequestException
 
+from db import get_settings
+
 from pynyaasi.nyaasi import NyaaSiClient
 
 nyaa_client = NyaaSiClient()
@@ -48,17 +50,21 @@ def resolve_info_hash_to_id(info_hash: str) -> int | None:
     return None
 
 
-def get_nyaa_resource_for_episode(episode: dict, prefer_extended: bool = False):
+def get_nyaa_resource_for_episode(episode: dict):
     """
     Get nyaa resource for a given episode using NyaaSiClient.
 
     Args:
         episode: Episode dict containing torrent_link and optionally torrent_link_extended
-        prefer_extended: If True, prefer the extended version torrent link
 
     Returns:
         ResourceItem from pynyaasi or None if not found
     """
+    settings = get_settings()
+    if not settings:
+        return None
+    prefer_extended = settings["prefer_extended"]["value"]
+
     torrent_link = None
     if prefer_extended:
         torrent_link = episode.get("torrent_link_extended")
