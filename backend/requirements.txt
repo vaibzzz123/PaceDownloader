@@ -24,3 +24,7 @@ smmap==5.0.2
 tqdm==4.67.1
 tzlocal==5.3.1
 urllib3==2.6.3
+qbittorrent-api>=2024.0.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+pydantic>=2.10.0
