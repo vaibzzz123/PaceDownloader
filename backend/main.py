@@ -8,6 +8,7 @@ load_dotenv()
 
 from db import get_settings, initialize_db
 from logging_config import get_logger, setup_logging
+from qbittorrent import QbittorrentClient
 
 # Initialize database and logging before other imports that may log
 initialize_db()
@@ -41,13 +42,14 @@ if __name__ == "__main__":
     initialize_media(media_data_location)
     metadata_mapping = build_episode_mapping(media_data_location)
     logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
+    qbt_client = QbittorrentClient()
     # example_episode = metadata_mapping[0]
-    example_episode = metadata_mapping[0]
-    nyaa_resource = get_nyaa_resource_for_episode(example_episode)
-    logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
-    example_episode = metadata_mapping[33]
-    nyaa_resource = get_nyaa_resource_for_episode(example_episode)
-    logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
+    # example_episode = metadata_mapping[0]
+    # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
+    # logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
+    # example_episode = metadata_mapping[33]
+    # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
+    # logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
     # logger.debug(example_episode)
     # nyaa_id = extract_nyaa_id(example_episode)
     # logger.debug("Example episode NyaaSi ID: %s", nyaa_id)
