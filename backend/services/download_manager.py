@@ -105,8 +105,8 @@ class DownloadManager:
 
     def _download_with_new_torrent(self, request: DownloadRequest) -> DownloadResult:
         """Add new torrent and start episode download."""
-        # Add torrent to qBittorrent (paused)
-        torrent_hash = self._qbt.add_torrent(request.magnet_link, paused=True)
+        # Add torrent to qBittorrent (NOT paused - need to download metadata first)
+        torrent_hash = self._qbt.add_torrent(request.magnet_link, paused=False)
 
         if not torrent_hash:
             return DownloadResult(
@@ -115,20 +115,27 @@ class DownloadManager:
             )
 
         # Wait for metadata to load (up to 30 seconds)
+        # Torrent must be running to fetch metadata from peers
         logger.info("Waiting for torrent metadata to load...")
+        metadata_loaded = False
         for _ in range(30):
             torrent_info = self._qbt.get_torrent(torrent_hash)
-            if torrent_info and torrent_info.state not in ("metaDL", "stalledDL"):
-                break
+            if torrent_info:
+                # Check if we have files (metadata loaded)
+                files = self._qbt.get_torrent_files(torrent_hash)
+                if files:
+                    metadata_loaded = True
+                    break
             time.sleep(1)
 
-        # Get torrent files and find matching file
-        files = self._qbt.get_torrent_files(torrent_hash)
-        if not files:
-            logger.error("Torrent has no files, metadata may still be loading")
+        # Pause torrent to select files before downloading content
+        self._qbt.pause_torrent(torrent_hash)
+
+        if not metadata_loaded:
+            logger.error("Torrent metadata failed to load within 30 seconds")
             return DownloadResult(
                 success=False,
-                message="Torrent has no files (metadata may still be loading)",
+                message="Torrent metadata failed to load (timed out after 30 seconds)",
             )
 
         # Skip all files first
