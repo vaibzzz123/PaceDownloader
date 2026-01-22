@@ -3,7 +3,7 @@
 import os
 from typing import Any
 
-from db import con, cur, SETTINGS_FIELDS
+from db import get_connection, SETTINGS_FIELDS
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -42,26 +42,27 @@ class SettingsRepository:
           - env_override: True if an environment variable is overriding the db value
         """
         logger.debug("Fetching settings from database")
-        cur.execute("SELECT * FROM settings WHERE singleton = 1")
-        row = cur.fetchone()
-        if not row:
-            logger.warning("No settings found in database")
-            return None
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM settings WHERE singleton = 1")
+            row = cur.fetchone()
+            if not row:
+                logger.warning("No settings found in database")
+                return None
 
-        columns = [desc[0] for desc in cur.description]
-        db_settings = dict(zip(columns, row))
+            db_settings = dict(row)
 
-        result = {}
-        for field in SETTINGS_FIELDS:
-            db_value = db_settings.get(field)
-            env_value = self._get_env_value(field)
+            result = {}
+            for field in SETTINGS_FIELDS:
+                db_value = db_settings.get(field)
+                env_value = self._get_env_value(field)
 
-            if env_value is not None:
-                result[field] = {"value": env_value, "env_override": True}
-            else:
-                result[field] = {"value": db_value, "env_override": False}
+                if env_value is not None:
+                    result[field] = {"value": env_value, "env_override": True}
+                else:
+                    result[field] = {"value": db_value, "env_override": False}
 
-        return result
+            return result
 
     def get_setting(self, field: str) -> Any | None:
         """
@@ -92,37 +93,39 @@ class SettingsRepository:
         log_level: str = "INFO",
     ) -> None:
         """Save settings to the database."""
-        cur.execute(
-            """
-            INSERT INTO settings (
-                singleton, media_data_location, prefer_extended, qbt_hostname,
-                qbt_username, qbt_password, qbt_path_mapping, qbt_category,
-                qbt_download_location, qbt_polling_rate, log_level
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(singleton) DO UPDATE SET
-                media_data_location = excluded.media_data_location,
-                prefer_extended = excluded.prefer_extended,
-                qbt_hostname = excluded.qbt_hostname,
-                qbt_username = excluded.qbt_username,
-                qbt_password = excluded.qbt_password,
-                qbt_path_mapping = excluded.qbt_path_mapping,
-                qbt_category = excluded.qbt_category,
-                qbt_download_location = excluded.qbt_download_location,
-                qbt_polling_rate = excluded.qbt_polling_rate,
-                log_level = excluded.log_level
-            """,
-            (
-                media_data_location,
-                int(prefer_extended),
-                qbt_hostname,
-                qbt_username,
-                qbt_password,
-                qbt_path_mapping,
-                qbt_category,
-                qbt_download_location,
-                qbt_polling_rate,
-                log_level,
-            ),
-        )
-        con.commit()
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO settings (
+                    singleton, media_data_location, prefer_extended, qbt_hostname,
+                    qbt_username, qbt_password, qbt_path_mapping, qbt_category,
+                    qbt_download_location, qbt_polling_rate, log_level
+                ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(singleton) DO UPDATE SET
+                    media_data_location = excluded.media_data_location,
+                    prefer_extended = excluded.prefer_extended,
+                    qbt_hostname = excluded.qbt_hostname,
+                    qbt_username = excluded.qbt_username,
+                    qbt_password = excluded.qbt_password,
+                    qbt_path_mapping = excluded.qbt_path_mapping,
+                    qbt_category = excluded.qbt_category,
+                    qbt_download_location = excluded.qbt_download_location,
+                    qbt_polling_rate = excluded.qbt_polling_rate,
+                    log_level = excluded.log_level
+                """,
+                (
+                    media_data_location,
+                    int(prefer_extended),
+                    qbt_hostname,
+                    qbt_username,
+                    qbt_password,
+                    qbt_path_mapping,
+                    qbt_category,
+                    qbt_download_location,
+                    qbt_polling_rate,
+                    log_level,
+                ),
+            )
+            conn.commit()
         logger.info("Settings saved successfully")

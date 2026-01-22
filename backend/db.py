@@ -1,12 +1,32 @@
 import os
 import sqlite3
+from contextlib import contextmanager
 
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-con = sqlite3.connect("backend.sqlite3")
+DB_PATH = "backend.sqlite3"
+
+# Global connection for initialization only (runs in main thread)
+con = sqlite3.connect(DB_PATH)
 cur = con.cursor()
+
+
+@contextmanager
+def get_connection():
+    """
+    Get a database connection for thread-safe operations.
+
+    Use this instead of the global con/cur for any operations
+    that might run in different threads (e.g., FastAPI endpoints).
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row  # Enable dict-like access to rows
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 SETTINGS_FIELDS = [
     "media_data_location",

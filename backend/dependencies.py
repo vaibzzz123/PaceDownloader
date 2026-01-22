@@ -1,7 +1,5 @@
 """FastAPI dependency injection for services and repositories."""
 
-from functools import lru_cache
-
 from repositories.settings_repo import SettingsRepository
 from repositories.episode_download_repo import EpisodeDownloadRepository
 from repositories.torrent_download_repo import TorrentDownloadRepository
@@ -11,21 +9,18 @@ from services.file_manager import FileManager
 from services.download_manager import DownloadManager
 
 
-@lru_cache()
 def get_settings_repo() -> SettingsRepository:
-    """Get settings repository (singleton)."""
+    """Get settings repository instance."""
     return SettingsRepository()
 
 
-@lru_cache()
 def get_episode_download_repo() -> EpisodeDownloadRepository:
-    """Get episode download repository (singleton)."""
+    """Get episode download repository instance."""
     return EpisodeDownloadRepository()
 
 
-@lru_cache()
 def get_torrent_download_repo() -> TorrentDownloadRepository:
-    """Get torrent download repository (singleton)."""
+    """Get torrent download repository instance."""
     return TorrentDownloadRepository()
 
 
@@ -63,9 +58,8 @@ def get_path_mapper() -> PathMapper:
     return PathMapper(path_mapping)
 
 
-@lru_cache()
 def get_file_manager() -> FileManager:
-    """Get file manager (singleton)."""
+    """Get file manager instance."""
     return FileManager()
 
 
