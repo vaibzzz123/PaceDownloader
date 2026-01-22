@@ -23,6 +23,14 @@ SETTINGS_FIELDS = [
 
 
 def initialize_db():
+    """Initialize the database and create necessary tables."""
+    logger.info("Initializing database")
+    initialize_settings_table()
+    # Add qbt_polling_rate column if it doesn't exist (for existing databases)
+    logger.info("Database initialized")
+
+
+def initialize_settings_table():
     logger.debug("Creating settings table if not exists")
     cur.execute("""
         CREATE TABLE IF NOT EXISTS settings (
@@ -40,7 +48,6 @@ def initialize_db():
         )
     """)
     
-    # Add qbt_polling_rate column if it doesn't exist (for existing databases)
     try:
         cur.execute("ALTER TABLE settings ADD COLUMN qbt_polling_rate INTEGER NOT NULL DEFAULT 10")
         logger.debug("Added qbt_polling_rate column to settings table")
@@ -52,7 +59,6 @@ def initialize_db():
         INSERT OR IGNORE INTO settings (singleton) VALUES (1)
     """)
     con.commit()
-    logger.info("Database initialized")
 
 
 def _get_env_value(field: str):
