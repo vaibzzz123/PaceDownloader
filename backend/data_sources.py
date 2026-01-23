@@ -158,7 +158,9 @@ def initialize_media(media_data_location: Path):
         logger.debug("Source directory not found, refreshing episode metadata")
         refresh_episode_metadata()
 
-    media_data_location.mkdir(parents=True, exist_ok=True)
+    if not media_data_location.exists():
+        logger.debug("Creating media data location at %s", media_data_location)
+        media_data_location.mkdir(parents=True, exist_ok=True)
 
     shutil.copytree(source_dir, media_data_location, dirs_exist_ok=True)
 

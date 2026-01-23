@@ -167,8 +167,9 @@ class DownloadManager:
 
         # Calculate file paths
         # qbt_file_path is the path as qBittorrent sees it
-        if torrent_info and torrent_info.content_path:
-            qbt_file_path = f"{torrent_info.content_path}/{matching_file.name}"
+        # Use save_path (not content_path) because file.name already includes torrent folder
+        if torrent_info and torrent_info.save_path:
+            qbt_file_path = f"{torrent_info.save_path}/{matching_file.name}"
         else:
             qbt_file_path = matching_file.name
 
@@ -223,8 +224,9 @@ class DownloadManager:
         torrent_info = self._qbt.get_torrent(torrent_hash)
 
         # Calculate file paths
-        if torrent_info and torrent_info.content_path:
-            qbt_file_path = f"{torrent_info.content_path}/{matching_file.name}"
+        # Use save_path (not content_path) because file.name already includes torrent folder
+        if torrent_info and torrent_info.save_path:
+            qbt_file_path = f"{torrent_info.save_path}/{matching_file.name}"
         else:
             qbt_file_path = matching_file.name
 
