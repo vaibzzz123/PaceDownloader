@@ -1,4 +1,5 @@
 import os
+import time
 import zlib
 from pathlib import Path
 
@@ -39,14 +40,20 @@ def calculate_crc32(filepath: str) -> str:
 if __name__ == "__main__":
     logger.info("Starting One Pace Jellyfin backend")
     media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
-    initialize_media(media_data_location)
+    # initialize_media(media_data_location)
     metadata_mapping = build_episode_mapping(media_data_location)
     logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
     qbt_client = QbittorrentClient()
-    resp = qbt_client.create_torrent(
+    info_hash = qbt_client.create_torrent(
         os.getenv("TEST_MAGNET_LINK", "")
     )
-    logger.debug("qBittorrent add torrent response: %s", resp)
+
+    torrent_info = qbt_client.get_torrent_info(info_hash)
+    logger.debug(torrent_info)
+    qbt_client.pause_torrent(info_hash)
+    logger.debug("Paused torrent with info hash: %s", info_hash)
+    time.sleep(5)
+    qbt_client.stop_torrent(info_hash)
     # example_episode = metadata_mapping[0]
     # example_episode = metadata_mapping[0]
     # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
