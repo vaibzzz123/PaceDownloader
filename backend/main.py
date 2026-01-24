@@ -44,16 +44,16 @@ if __name__ == "__main__":
     metadata_mapping = build_episode_mapping(media_data_location)
     logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
     qbt_client = QbittorrentClient()
-    info_hash = qbt_client.create_torrent(
+    torrent_info = qbt_client.create_torrent(
         os.getenv("TEST_MAGNET_LINK", "")
     )
-
-    torrent_info = qbt_client.get_torrent_info(info_hash)
-    logger.debug(torrent_info)
+    logger.debug("Created torrent: %s", torrent_info)
+    info_hash = torrent_info.hash
     qbt_client.pause_torrent(info_hash)
-    logger.debug("Paused torrent with info hash: %s", info_hash)
-    time.sleep(5)
-    qbt_client.stop_torrent(info_hash)
+    # logger.debug("Paused torrent with info hash: %s", info_hash)
+    # torrent_info = qbt_client.get_torrent_info(info_hash)
+    # time.sleep(5)
+    # qbt_client.stop_torrent(info_hash)
     # example_episode = metadata_mapping[0]
     # example_episode = metadata_mapping[0]
     # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
