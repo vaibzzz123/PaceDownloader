@@ -40,3 +40,60 @@ class QbittorrentClient:
             except qbittorrentapi.LoginFailed as e:
                 logger.error("Failed to log in to qBittorrent: %s", e)
                 raise
+    
+    def create_torrent(self, torrent_magnet_link: str, timeout: int = 60):
+        """
+        Add a torrent and wait for metadata to be fetched, then pause it.
+
+        Args:
+            torrent_magnet_link: The magnet link to add
+            timeout: Maximum seconds to wait for metadata (default 60)
+
+        Returns:
+            The torrent info once metadata is fetched
+        """
+        import time
+        import re
+
+        if self._client is None:
+            self._initialize_connection()
+
+        # Extract info hash from magnet link to identify the torrent
+        hash_match = re.search(r'btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})', torrent_magnet_link)
+        if not hash_match:
+            raise ValueError("Could not extract info hash from magnet link")
+
+        info_hash = hash_match.group(1).lower()
+
+        logger.debug("Adding torrent %s to qBittorrent", torrent_magnet_link)
+        try:
+            self._client.torrents_add(
+                urls=torrent_magnet_link,
+                category=self._category if self._category else None,
+                save_path=self._download_location if self._download_location else None,
+            )
+            logger.info("Added torrent, waiting for metadata to be fetched...")
+
+            # Poll until metadata is fetched
+            start_time = time.time()
+            while time.time() - start_time < timeout:
+                torrents = self._client.torrents_info(torrent_hashes=info_hash)
+                if torrents:
+                    torrent = torrents[0]
+                    # Metadata is fetched when the torrent has a name (not just the hash)
+                    # and has files available
+                    if torrent.name and torrent.name != info_hash:
+                        files = self._client.torrents_files(torrent_hash=info_hash)
+                        if files:
+                            logger.info("Metadata fetched for torrent: %s", torrent.name)
+                            # Pause the torrent to prevent downloading
+                            self._client.torrents_pause(torrent_hashes=info_hash)
+                            logger.debug("Torrent paused after metadata fetch")
+                            return torrent
+                time.sleep(1)
+
+            raise TimeoutError(f"Timed out waiting for torrent metadata after {timeout} seconds")
+
+        except Exception as e:
+            logger.error("Failed to add torrent with magnet link %s: %s", torrent_magnet_link, e)
+            raise

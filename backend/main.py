@@ -43,6 +43,10 @@ if __name__ == "__main__":
     metadata_mapping = build_episode_mapping(media_data_location)
     logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
     qbt_client = QbittorrentClient()
+    resp = qbt_client.create_torrent(
+        os.getenv("TEST_MAGNET_LINK", "")
+    )
+    logger.debug("qBittorrent add torrent response: %s", resp)
     # example_episode = metadata_mapping[0]
     # example_episode = metadata_mapping[0]
     # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
