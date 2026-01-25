@@ -132,4 +132,39 @@ class QbittorrentClient:
         except Exception as e:
             logger.error("Failed to stop torrent with hash %s: %s", info_hash, e)
             raise
-
+    
+    def get_file_by_crc32(self, info_hash: str, target_crc32: str):
+        """Get a file within a torrent by its CRC32 checksum."""
+        try:
+            files = self._client.torrents_files(torrent_hash=info_hash)
+            for file in files:
+                if file.crc32 and file.crc32.lower() == target_crc32.lower():
+                    logger.info(
+                        "Found file with CRC32 %s in torrent %s: %s",
+                        target_crc32,
+                        info_hash,
+                        file.name,
+                    )
+                    return file
+            logger.warning(
+                "No file with CRC32 %s found in torrent %s", target_crc32, info_hash
+            )
+            return None
+        except Exception as e:
+            logger.error(
+                "Failed to get files for torrent with hash %s: %s", info_hash, e
+            )
+            raise
+    
+    def change_file_priority(self, info_hash: str, file_indices: list[int], priority: int):
+        """Change the priority of specific files in a torrent."""
+        try:
+            self._client.torrents_file_priority(
+                torrent_hash=info_hash,
+                file_ids=file_indices,
+                priority=priority
+            )
+            logger.info("Changed file priorities for torrent with hash: %s", info_hash)
+        except Exception as e:
+            logger.error("Failed to change file priorities for hash %s: %s", info_hash, e)
+            raise
