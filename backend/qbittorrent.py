@@ -1,5 +1,6 @@
 import time
 import re
+from enum import Enum
 
 import qbittorrentapi
 from db import get_settings
@@ -43,6 +44,12 @@ class QbittorrentClient:
             except qbittorrentapi.LoginFailed as e:
                 logger.error("Failed to log in to qBittorrent: %s", e)
                 raise
+
+    class FilePriority(Enum):
+        DONT_DOWNLOAD = 0
+        NORMAL = 1
+        HIGH = 6
+        MAX = 7
 
     def create_torrent(
         self, torrent_magnet_link: str, metadata_timeout: int = 60
@@ -115,6 +122,15 @@ class QbittorrentClient:
             )
             raise
 
+    def start_torrent(self, info_hash: str):
+        """Start a torrent by its info hash."""
+        try:
+            self._client.torrents_resume(torrent_hashes=info_hash)
+            logger.info("Started torrent with hash: %s", info_hash)
+        except Exception as e:
+            logger.error("Failed to start torrent with hash %s: %s", info_hash, e)
+            raise
+
     def pause_torrent(self, info_hash: str):
         """Pause a torrent by its info hash."""
         try:
@@ -138,7 +154,7 @@ class QbittorrentClient:
         try:
             files = self._client.torrents_files(torrent_hash=info_hash)
             for file in files:
-                if file.crc32 and file.crc32.lower() == target_crc32.lower():
+                if file.name and target_crc32.lower() in file.name.lower():
                     logger.info(
                         "Found file with CRC32 %s in torrent %s: %s",
                         target_crc32,
@@ -155,16 +171,29 @@ class QbittorrentClient:
                 "Failed to get files for torrent with hash %s: %s", info_hash, e
             )
             raise
-    
-    def change_file_priority(self, info_hash: str, file_indices: list[int], priority: int):
+
+    def change_file_priority(self, info_hash: str, files: list[dict] | dict | None, priority: FilePriority):
         """Change the priority of specific files in a torrent."""
         try:
+            if files is None:
+                # If no specific file IDs are provided, change priority for all files
+                files = self._client.torrents_files(torrent_hash=info_hash)
+            elif isinstance(files, dict):
+                files = [files]
+            
+            file_indices = list(map(lambda f: f.index, files))
             self._client.torrents_file_priority(
                 torrent_hash=info_hash,
                 file_ids=file_indices,
-                priority=priority
+                priority=priority.value
             )
-            logger.info("Changed file priorities for torrent with hash: %s", info_hash)
+            for f in files:
+                logger.debug(
+                    "Set priority %d for file %s in torrent %s",
+                    priority.value,
+                    f.name,
+                    info_hash,
+                )
         except Exception as e:
             logger.error("Failed to change file priorities for hash %s: %s", info_hash, e)
             raise

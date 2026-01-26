@@ -50,6 +50,13 @@ if __name__ == "__main__":
     logger.debug("Created torrent: %s", torrent_info)
     info_hash = torrent_info.hash
     qbt_client.pause_torrent(info_hash)
+    qbt_client.change_file_priority(
+        info_hash, None, qbt_client.FilePriority.DONT_DOWNLOAD)
+    file = qbt_client.get_file_by_crc32(info_hash, metadata_mapping[1]['crc32'])
+    qbt_client.change_file_priority(
+        info_hash, file, qbt_client.FilePriority.NORMAL
+    )
+    qbt_client.start_torrent(info_hash)
     # logger.debug("Paused torrent with info hash: %s", info_hash)
     # torrent_info = qbt_client.get_torrent_info(info_hash)
     # time.sleep(5)
