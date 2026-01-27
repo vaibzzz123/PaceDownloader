@@ -124,9 +124,26 @@ class DownloadManager:
 
         logger.info("Removed episode download for episode ID %d", episode_id)
 
-    def get_episode_status(self, episode_id: int):
-        # Logic to check download status of an episode
-        pass
+    def get_episode_info(self, episode_id: int) -> dict | None:
+        episode_download = db.get_episode_download_by_ep_id(episode_id)
+        if not episode_download:
+            return None
+
+        info = dict(episode_download)
+
+        if episode_download["status"] in ("hardlink", "copy"):
+            info["download_progress"] = 1.0
+        else:
+            infohash = episode_download["torrent_infohash"]
+            crc32 = episode_download["crc32"]
+            try:
+                episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
+                info["download_progress"] = episode_file.progress if episode_file else 0.0
+            except Exception as e:
+                logger.warning("Could not fetch progress for episode %d: %s", episode_id, e)
+                info["download_progress"] = 0.0
+
+        return info
 
     def list_episode_downloads(self) -> list[dict]:
         return db.get_all_episode_downloads()
