@@ -26,7 +26,8 @@ def initialize_db():
     """Initialize the database and create necessary tables."""
     logger.info("Initializing database")
     initialize_settings_table()
-    # Add qbt_polling_rate column if it doesn't exist (for existing databases)
+    initialize_torrent_download_table()
+    initialize_episode_download_table()
     logger.info("Database initialized")
 
 
@@ -58,6 +59,158 @@ def initialize_settings_table():
     cur.execute("""
         INSERT OR IGNORE INTO settings (singleton) VALUES (1)
     """)
+    con.commit()
+
+
+def initialize_torrent_download_table():
+    logger.debug("Creating torrent_download table if not exists")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS torrent_download (
+            infohash TEXT PRIMARY KEY,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.commit()
+
+
+def initialize_episode_download_table():
+    logger.debug("Creating episode_download table if not exists")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS episode_download (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ep_id TEXT NOT NULL,
+            torrent_infohash TEXT NOT NULL REFERENCES torrent_download(infohash),
+            crc32 TEXT NOT NULL,
+            prefer_extended INTEGER NOT NULL DEFAULT 0,
+            file_path_torrent TEXT,
+            file_path_disk TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    con.commit()
+
+
+# --- torrent_download helpers ---
+
+
+def create_torrent_download(infohash: str):
+    cur.execute(
+        "INSERT OR IGNORE INTO torrent_download (infohash) VALUES (?)",
+        (infohash,),
+    )
+    con.commit()
+
+
+def get_torrent_download(infohash: str) -> dict | None:
+    cur.execute("SELECT * FROM torrent_download WHERE infohash = ?", (infohash,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    columns = [desc[0] for desc in cur.description]
+    return dict(zip(columns, row))
+
+
+def delete_torrent_download(infohash: str):
+    cur.execute("DELETE FROM torrent_download WHERE infohash = ?", (infohash,))
+    con.commit()
+
+
+# --- episode_download helpers ---
+
+
+def create_episode_download(
+    ep_id: str,
+    torrent_infohash: str,
+    crc32: str,
+    prefer_extended: bool = False,
+    file_path_torrent: str | None = None,
+    file_path_disk: str | None = None,
+    status: str = "pending",
+) -> int:
+    cur.execute(
+        """
+        INSERT INTO episode_download (
+            ep_id, torrent_infohash, crc32, prefer_extended,
+            file_path_torrent, file_path_disk, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            ep_id,
+            torrent_infohash,
+            crc32,
+            int(prefer_extended),
+            file_path_torrent,
+            file_path_disk,
+            status,
+        ),
+    )
+    con.commit()
+    return cur.lastrowid
+
+
+def get_episode_download(download_id: int) -> dict | None:
+    cur.execute("SELECT * FROM episode_download WHERE id = ?", (download_id,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    columns = [desc[0] for desc in cur.description]
+    return dict(zip(columns, row))
+
+
+def get_episode_downloads_by_torrent(torrent_infohash: str) -> list[dict]:
+    cur.execute(
+        "SELECT * FROM episode_download WHERE torrent_infohash = ?",
+        (torrent_infohash,),
+    )
+    rows = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def get_episode_downloads_by_status(status: str) -> list[dict]:
+    cur.execute("SELECT * FROM episode_download WHERE status = ?", (status,))
+    rows = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def update_episode_download_status(download_id: int, status: str):
+    cur.execute(
+        "UPDATE episode_download SET status = ? WHERE id = ?",
+        (status, download_id),
+    )
+    con.commit()
+
+
+def update_episode_download_paths(
+    download_id: int,
+    file_path_torrent: str | None = None,
+    file_path_disk: str | None = None,
+):
+    if file_path_torrent is not None:
+        cur.execute(
+            "UPDATE episode_download SET file_path_torrent = ? WHERE id = ?",
+            (file_path_torrent, download_id),
+        )
+    if file_path_disk is not None:
+        cur.execute(
+            "UPDATE episode_download SET file_path_disk = ? WHERE id = ?",
+            (file_path_disk, download_id),
+        )
+    con.commit()
+
+
+def delete_episode_download(download_id: int):
+    cur.execute("DELETE FROM episode_download WHERE id = ?", (download_id,))
+    con.commit()
+
+
+def delete_episode_downloads_by_torrent(torrent_infohash: str):
+    cur.execute(
+        "DELETE FROM episode_download WHERE torrent_infohash = ?",
+        (torrent_infohash,),
+    )
     con.commit()
 
 

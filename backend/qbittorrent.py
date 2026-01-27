@@ -55,17 +55,10 @@ class QbittorrentClient:
         self, torrent_magnet_link: str, metadata_timeout: int = 60
     ) -> str:
         """Add a torrent to qBittorrent using its magnet link, waiting until metadata is fetched."""
-        # Extract info hash from magnet link to identify the torrent
-        hash_match = re.search(
-            r"btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})", torrent_magnet_link
-        )
-        if not hash_match:
-            raise ValueError("Could not extract info hash from magnet link")
-
-        info_hash = hash_match.group(1).lower()
 
         logger.debug("Adding torrent %s to qBittorrent", torrent_magnet_link)
         try:
+            info_hash = self.extract_info_hash(torrent_magnet_link)
             resp = self._client.torrents_add(
                 urls=torrent_magnet_link,
                 category=self._category if self._category else None,
@@ -108,6 +101,15 @@ class QbittorrentClient:
                 "Failed to retrieve torrent info for hash %s: %s", info_hash, e
             )
             raise
+
+    def extract_info_hash(self, torrent_magnet_link: str) -> str:
+        """Extract info hash from a magnet link."""
+        hash_match = re.search(
+            r"btih:([a-fA-F0-9]{40}|[a-zA-Z2-7]{32})", torrent_magnet_link
+        )
+        if not hash_match:
+            raise ValueError("Could not extract info hash from magnet link")
+        return hash_match.group(1).lower()
 
     def get_torrent_info(self, info_hash: str):
         """Retrieve torrent info by its info hash."""
