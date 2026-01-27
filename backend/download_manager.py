@@ -69,12 +69,20 @@ class DownloadManager:
         db.create_torrent_download(infohash)
 
     def pause_episode(self, episode_id: int):
-        # Logic to pause episode download using qBittorrent client
-        pass
+        episode_download = db.get_episode_download_by_ep_id(episode_id)
+        if not episode_download:
+            raise ValueError(f"No download found for episode ID {episode_id}")
+        self.qbt_client.pause_torrent(episode_download["torrent_infohash"])
+        db.update_episode_download_status(episode_download["id"], "paused")
+        logger.info("Paused download for episode ID %d", episode_id)
 
     def resume_episode(self, episode_id: int):
-        # Logic to resume episode download using qBittorrent client
-        pass
+        episode_download = db.get_episode_download_by_ep_id(episode_id)
+        if not episode_download:
+            raise ValueError(f"No download found for episode ID {episode_id}")
+        self.qbt_client.start_torrent(episode_download["torrent_infohash"])
+        db.update_episode_download_status(episode_download["id"], "downloading")
+        logger.info("Resumed download for episode ID %d", episode_id)
 
     def remove_episode(self, episode_id: int):
         # Logic to remove episode download using qBittorrent client

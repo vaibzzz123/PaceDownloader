@@ -158,6 +158,15 @@ def get_episode_download(download_id: int) -> dict | None:
     return dict(zip(columns, row))
 
 
+def get_episode_download_by_ep_id(ep_id: str) -> dict | None:
+    cur.execute("SELECT * FROM episode_download WHERE ep_id = ?", (ep_id,))
+    row = cur.fetchone()
+    if not row:
+        return None
+    columns = [desc[0] for desc in cur.description]
+    return dict(zip(columns, row))
+
+
 def get_episode_downloads_by_torrent(torrent_infohash: str) -> list[dict]:
     cur.execute(
         "SELECT * FROM episode_download WHERE torrent_infohash = ?",
