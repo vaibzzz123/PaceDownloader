@@ -111,8 +111,21 @@ def get_torrent_download(infohash: str) -> dict | None:
     return dict(zip(columns, row))
 
 
+def get_all_torrent_downloads() -> list[dict]:
+    cur.execute("SELECT * FROM torrent_download")
+    rows = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]
+    return [dict(zip(columns, row)) for row in rows]
+
+
 def delete_torrent_download(infohash: str):
     cur.execute("DELETE FROM torrent_download WHERE infohash = ?", (infohash,))
+    con.commit()
+
+
+def clear_all_downloads():
+    cur.execute("DELETE FROM episode_download")
+    cur.execute("DELETE FROM torrent_download")
     con.commit()
 
 
