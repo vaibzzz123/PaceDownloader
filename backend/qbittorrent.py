@@ -3,6 +3,7 @@ import re
 from enum import Enum
 
 import qbittorrentapi
+from qbittorrentapi import TorrentDictionary
 from db import get_settings
 from logging_config import get_logger
 
@@ -53,7 +54,7 @@ class QbittorrentClient:
 
     def create_torrent(
         self, torrent_magnet_link: str, metadata_timeout: int = 60
-    ) -> str:
+    ) -> TorrentDictionary:
         """Add a torrent to qBittorrent using its magnet link, waiting until metadata is fetched."""
 
         logger.debug("Adding torrent %s to qBittorrent", torrent_magnet_link)
