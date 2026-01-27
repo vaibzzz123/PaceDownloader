@@ -1,4 +1,5 @@
 import os
+import shutil
 
 from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
@@ -91,20 +92,69 @@ class DownloadManager:
         logger.info("Resumed download for episode ID %d", episode_id)
 
     def remove_episode(self, episode_id: int):
-        # Logic to remove episode download using qBittorrent client
-        pass
+        episode_download = db.get_episode_download_by_ep_id(episode_id)
+        if not episode_download:
+            raise ValueError(f"No download found for episode ID {episode_id}")
+
+        infohash = episode_download["torrent_infohash"]
+        crc32 = episode_download["crc32"]
+
+        # Set file priority to don't download in qBittorrent
+        episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
+        if episode_file:
+            self.qbt_client.change_file_priority(infohash, episode_file, self.qbt_client.FilePriority.DONT_DOWNLOAD)
+
+        # Delete the file at the disk (hardlink/copy) location
+        file_path_disk = episode_download["file_path_disk"]
+        if file_path_disk and os.path.exists(file_path_disk):
+            os.remove(file_path_disk)
+            logger.info("Removed disk file for episode %d: %s", episode_id, file_path_disk)
+
+        # Remove the episode download DB record
+        db.delete_episode_download(episode_download["id"])
+
+        # If no other episodes use this torrent, remove it entirely from qBittorrent
+        remaining = db.get_episode_downloads_by_torrent(infohash)
+        if not remaining:
+            self.qbt_client.stop_torrent(infohash)
+            db.delete_torrent_download(infohash)
+            logger.info("Removed torrent %s from qBittorrent (no remaining episodes)", infohash)
+
+        logger.info("Removed episode download for episode ID %d", episode_id)
 
     def get_episode_status(self, episode_id: int):
         # Logic to check download status of an episode
         pass
 
-    def list_active_downloads(self):
-        # Logic to list all active downloads
+    def list_episode_downloads(self):
+        # Logic to list all episode downloads
+        pass
+    
+    def list_torrent_downloads(self):
+        # Logic to list all torrent downloads
         pass
 
     def _add_episode_to_data_location(self, episode_id: int):
-        # Internal method to handle file placement after download
-        pass
+        episode_download = db.get_episode_download_by_ep_id(episode_id)
+        if not episode_download:
+            raise ValueError(f"No download found for episode ID {episode_id}")
+
+        src = episode_download["file_path_torrent"]
+        dest = episode_download["file_path_disk"]
+        if not src or not dest:
+            raise ValueError(f"Missing file paths for episode ID {episode_id}")
+
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+        try:
+            os.link(src, dest)
+            logger.info("Hardlinked episode %d: %s -> %s", episode_id, src, dest)
+            db.update_episode_download_status(episode_download["id"], "hardlink")
+        except OSError as e:
+            logger.warning("Hardlink failed for episode %d (%s), falling back to copy", episode_id, e)
+            shutil.copy2(src, dest)
+            logger.info("Copied episode %d: %s -> %s", episode_id, src, dest)
+            db.update_episode_download_status(episode_download["id"], "copy")
 
     def _translate_file_path(self, file_path: str) -> str:
         settings = db.get_settings()

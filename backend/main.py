@@ -74,7 +74,8 @@ if __name__ == "__main__":
     # qbt_client.start_torrent(info_hash)
     
     download_manager = DownloadManager(qbt_client, metadata_mapping)
-    download_manager.download_episode(metadata_mapping[1]['id'])
+    # download_manager.download_episode(metadata_mapping[1]['id'])
+    # download_manager.remove_episode(metadata_mapping[1]['id'])
     
     # logger.debug("Paused torrent with info hash: %s", info_hash)
     # torrent_info = qbt_client.get_torrent_info(info_hash)
