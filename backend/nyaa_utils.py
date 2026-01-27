@@ -108,10 +108,3 @@ def get_nyaa_resource_for_episode(episode: dict):
         logger.error("Failed to fetch Nyaa resource for %s: %s", episode.get("ep_name"), e)
 
     return None
-
-
-def get_magnet_link(nyaa_resource) -> str | None:
-    """Extract magnet URL from a nyaa resource."""
-    if nyaa_resource:
-        return nyaa_resource.magnet_url
-    return None

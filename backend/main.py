@@ -10,6 +10,7 @@ load_dotenv()
 from db import get_settings, initialize_db
 from logging_config import get_logger, setup_logging
 from qbittorrent import QbittorrentClient
+from download_manager import DownloadManager
 
 # Initialize database and logging before other imports that may log
 initialize_db()
@@ -44,19 +45,23 @@ if __name__ == "__main__":
     metadata_mapping = build_episode_mapping(media_data_location)
     logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
     qbt_client = QbittorrentClient()
-    torrent_info = qbt_client.create_torrent(
-        os.getenv("TEST_MAGNET_LINK", "")
-    )
-    logger.debug("Created torrent: %s", torrent_info)
-    info_hash = torrent_info.hash
-    qbt_client.pause_torrent(info_hash)
-    qbt_client.change_file_priority(
-        info_hash, None, qbt_client.FilePriority.DONT_DOWNLOAD)
-    file = qbt_client.get_file_by_crc32(info_hash, metadata_mapping[1]['crc32'])
-    qbt_client.change_file_priority(
-        info_hash, file, qbt_client.FilePriority.NORMAL
-    )
-    qbt_client.start_torrent(info_hash)
+    # torrent_info = qbt_client.create_torrent(
+    #     os.getenv("TEST_MAGNET_LINK", "")
+    # )
+    # logger.debug("Created torrent: %s", torrent_info)
+    # info_hash = torrent_info.hash
+    # qbt_client.pause_torrent(info_hash)
+    # qbt_client.change_file_priority(
+    #     info_hash, None, qbt_client.FilePriority.DONT_DOWNLOAD)
+    # file = qbt_client.get_file_by_crc32(info_hash, metadata_mapping[1]['crc32'])
+    # qbt_client.change_file_priority(
+    #     info_hash, file, qbt_client.FilePriority.NORMAL
+    # )
+    # qbt_client.start_torrent(info_hash)
+    
+    download_manager = DownloadManager(qbt_client, metadata_mapping)
+    download_manager.download_episode(metadata_mapping[1]['id'])
+    
     # logger.debug("Paused torrent with info hash: %s", info_hash)
     # torrent_info = qbt_client.get_torrent_info(info_hash)
     # time.sleep(5)
