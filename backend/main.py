@@ -7,14 +7,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from db import get_settings, initialize_db
+import db
 from logging_config import get_logger, setup_logging
 from qbittorrent import QbittorrentClient
 from download_manager import DownloadManager
 
 # Initialize database and logging before other imports that may log
-initialize_db()
-settings = get_settings()
+db.initialize_db()
+settings = db.get_settings()
 log_level = settings["log_level"]["value"] if settings else "INFO"
 setup_logging(log_level)
 
@@ -38,6 +38,19 @@ def calculate_crc32(filepath: str) -> str:
     return format(crc & 0xFFFFFFFF, "08x")
 
 
+def reset_all(qbt_client: QbittorrentClient):
+    """Remove all tracked torrents from qBittorrent (with files) and clear the DB."""
+    torrent_downloads = db.get_all_torrent_downloads()
+    for torrent in torrent_downloads:
+        try:
+            qbt_client.stop_torrent(torrent["infohash"])
+            logger.info("Removed torrent %s from qBittorrent", torrent["infohash"])
+        except Exception as e:
+            logger.warning("Failed to remove torrent %s from qBittorrent: %s", torrent["infohash"], e)
+    db.clear_all_downloads()
+    logger.info("Reset complete: all downloads cleared")
+
+
 if __name__ == "__main__":
     logger.info("Starting One Pace Jellyfin backend")
     media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
@@ -45,6 +58,7 @@ if __name__ == "__main__":
     metadata_mapping = build_episode_mapping(media_data_location)
     logger.info("Built metadata mapping for %d episodes", len(metadata_mapping))
     qbt_client = QbittorrentClient()
+    reset_all(qbt_client)
     # torrent_info = qbt_client.create_torrent(
     #     os.getenv("TEST_MAGNET_LINK", "")
     # )

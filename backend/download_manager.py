@@ -1,3 +1,5 @@
+import os
+
 from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
 from logging_config import get_logger
@@ -38,13 +40,17 @@ class DownloadManager:
             self._create_torrent_for_episode(nyaa_resource.magnet_url, infohash, crc32)
 
         episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
+        file_path_torrent = None
+        if episode_file:
+            torrent_info = self.qbt_client.get_torrent_info(infohash)
+            full_path = os.path.join(torrent_info.save_path, episode_file.name)
+            file_path_torrent = self._translate_file_path(full_path)
         db.create_episode_download(
             ep_id=episode_id,
             torrent_infohash=infohash,
             crc32=crc32,
             prefer_extended=prefer_extended,
-            # TODO: Get actual file path from qBittorrent client, and add path translation
-            file_path_torrent=episode_file.name if episode_file else None,
+            file_path_torrent=file_path_torrent,
             file_path_disk=episode_metadata["file_location_media"],
             status="downloading",
         )
@@ -99,3 +105,23 @@ class DownloadManager:
     def _add_episode_to_data_location(self, episode_id: int):
         # Internal method to handle file placement after download
         pass
+
+    def _translate_file_path(self, file_path: str) -> str:
+        settings = db.get_settings()
+        if not settings or not settings["qbt_path_mapping"]["value"]:
+            return file_path
+
+        mapping = settings["qbt_path_mapping"]["value"]
+        # Format: "local_path:remote_path" e.g. "/home/user/downloads/:/downloads/"
+        parts = mapping.split(":")
+        if len(parts) != 2:
+            logger.warning("Invalid qbt_path_mapping format: %s", mapping)
+            return file_path
+
+        local_path, remote_path = parts
+        if file_path.startswith(remote_path):
+            translated = file_path.replace(remote_path, local_path, 1)
+            logger.debug("Translated path: %s -> %s", file_path, translated)
+            return translated
+
+        return file_path
