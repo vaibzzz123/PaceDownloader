@@ -126,13 +126,11 @@ class DownloadManager:
         # Logic to check download status of an episode
         pass
 
-    def list_episode_downloads(self):
-        # Logic to list all episode downloads
-        pass
-    
-    def list_torrent_downloads(self):
-        # Logic to list all torrent downloads
-        pass
+    def list_episode_downloads(self) -> list[dict]:
+        return db.get_all_episode_downloads()
+
+    def list_torrent_downloads(self) -> list[dict]:
+        return db.get_all_torrent_downloads()
 
     def _add_episode_to_data_location(self, episode_id: int):
         episode_download = db.get_episode_download_by_ep_id(episode_id)

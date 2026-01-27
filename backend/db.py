@@ -190,6 +190,13 @@ def get_episode_downloads_by_torrent(torrent_infohash: str) -> list[dict]:
     return [dict(zip(columns, row)) for row in rows]
 
 
+def get_all_episode_downloads() -> list[dict]:
+    cur.execute("SELECT * FROM episode_download")
+    rows = cur.fetchall()
+    columns = [desc[0] for desc in cur.description]
+    return [dict(zip(columns, row)) for row in rows]
+
+
 def get_episode_downloads_by_status(status: str) -> list[dict]:
     cur.execute("SELECT * FROM episode_download WHERE status = ?", (status,))
     rows = cur.fetchall()
