@@ -1,5 +1,7 @@
 import os
 import shutil
+import threading
+import time
 
 from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
@@ -131,6 +133,58 @@ class DownloadManager:
 
     def list_torrent_downloads(self) -> list[dict]:
         return db.get_all_torrent_downloads()
+
+    def poll_downloads(self):
+        downloading = db.get_episode_downloads_by_status("downloading")
+        if not downloading:
+            return
+
+        for episode_download in downloading:
+            infohash = episode_download["torrent_infohash"]
+            crc32 = episode_download["crc32"]
+            ep_id = episode_download["ep_id"]
+
+            try:
+                # Resolve file_path_torrent if it wasn't set at download time
+                if not episode_download["file_path_torrent"]:
+                    episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
+                    if episode_file:
+                        torrent_info = self.qbt_client.get_torrent_info(infohash)
+                        full_path = os.path.join(torrent_info.save_path, episode_file.name)
+                        translated = self._translate_file_path(full_path)
+                        db.update_episode_download_paths(episode_download["id"], file_path_torrent=translated)
+                        logger.info("Resolved file path for episode %s: %s", ep_id, translated)
+
+                episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
+                if not episode_file:
+                    continue
+
+                if episode_file.progress >= 1.0:
+                    logger.info("Episode %s download complete, placing file", ep_id)
+                    self._add_episode_to_data_location(int(ep_id))
+            except Exception as e:
+                logger.error("Error polling episode %s: %s", ep_id, e)
+
+    def start_polling(self):
+        settings = db.get_settings()
+        interval = settings["qbt_polling_rate"]["value"] if settings else 10
+        logger.info("Starting download polling with interval %ds", interval)
+
+        def _poll_loop():
+            while self._polling:
+                try:
+                    self.poll_downloads()
+                except Exception as e:
+                    logger.error("Error during poll cycle: %s", e)
+                time.sleep(interval)
+
+        self._polling = True
+        self._poll_thread = threading.Thread(target=_poll_loop, daemon=True)
+        self._poll_thread.start()
+
+    def stop_polling(self):
+        self._polling = False
+        logger.info("Stopped download polling")
 
     def _add_episode_to_data_location(self, episode_id: int):
         episode_download = db.get_episode_download_by_ep_id(episode_id)

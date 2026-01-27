@@ -1,12 +1,12 @@
 import os
 import sqlite3
+from contextlib import contextmanager
 
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-con = sqlite3.connect("backend.sqlite3")
-cur = con.cursor()
+DB_PATH = "backend.sqlite3"
 
 SETTINGS_FIELDS = [
     "media_data_location",
@@ -22,6 +22,16 @@ SETTINGS_FIELDS = [
 ]
 
 
+@contextmanager
+def get_db():
+    con = sqlite3.connect(DB_PATH)
+    con.row_factory = sqlite3.Row
+    try:
+        yield con
+    finally:
+        con.close()
+
+
 def initialize_db():
     """Initialize the database and create necessary tables."""
     logger.info("Initializing database")
@@ -33,100 +43,104 @@ def initialize_db():
 
 def initialize_settings_table():
     logger.debug("Creating settings table if not exists")
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            singleton INTEGER PRIMARY KEY CHECK (singleton = 1) DEFAULT 1,
-            media_data_location TEXT NOT NULL DEFAULT '',
-            prefer_extended INTEGER NOT NULL DEFAULT 1,
-            qbt_hostname TEXT NOT NULL DEFAULT '',
-            qbt_username TEXT NOT NULL DEFAULT '',
-            qbt_password TEXT NOT NULL DEFAULT '',
-            qbt_path_mapping TEXT,
-            qbt_category TEXT,
-            qbt_download_location TEXT,
-            qbt_polling_rate INTEGER NOT NULL DEFAULT 10,
-            log_level TEXT NOT NULL DEFAULT 'INFO'
-        )
-    """)
-    
-    try:
-        cur.execute("ALTER TABLE settings ADD COLUMN qbt_polling_rate INTEGER NOT NULL DEFAULT 10")
-        logger.debug("Added qbt_polling_rate column to settings table")
-    except sqlite3.OperationalError:
-        # Column already exists
-        pass
-    
-    cur.execute("""
-        INSERT OR IGNORE INTO settings (singleton) VALUES (1)
-    """)
-    con.commit()
+    with get_db() as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1) DEFAULT 1,
+                media_data_location TEXT NOT NULL DEFAULT '',
+                prefer_extended INTEGER NOT NULL DEFAULT 1,
+                qbt_hostname TEXT NOT NULL DEFAULT '',
+                qbt_username TEXT NOT NULL DEFAULT '',
+                qbt_password TEXT NOT NULL DEFAULT '',
+                qbt_path_mapping TEXT,
+                qbt_category TEXT,
+                qbt_download_location TEXT,
+                qbt_polling_rate INTEGER NOT NULL DEFAULT 10,
+                log_level TEXT NOT NULL DEFAULT 'INFO'
+            )
+        """)
+
+        try:
+            con.execute("ALTER TABLE settings ADD COLUMN qbt_polling_rate INTEGER NOT NULL DEFAULT 10")
+            logger.debug("Added qbt_polling_rate column to settings table")
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+
+        con.execute("""
+            INSERT OR IGNORE INTO settings (singleton) VALUES (1)
+        """)
+        con.commit()
 
 
 def initialize_torrent_download_table():
     logger.debug("Creating torrent_download table if not exists")
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS torrent_download (
-            infohash TEXT PRIMARY KEY,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    con.commit()
+    with get_db() as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS torrent_download (
+                infohash TEXT PRIMARY KEY,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        con.commit()
 
 
 def initialize_episode_download_table():
     logger.debug("Creating episode_download table if not exists")
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS episode_download (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ep_id TEXT NOT NULL,
-            torrent_infohash TEXT NOT NULL REFERENCES torrent_download(infohash),
-            crc32 TEXT NOT NULL,
-            prefer_extended INTEGER NOT NULL DEFAULT 0,
-            file_path_torrent TEXT,
-            file_path_disk TEXT,
-            status TEXT NOT NULL DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    con.commit()
+    with get_db() as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS episode_download (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ep_id TEXT NOT NULL,
+                torrent_infohash TEXT NOT NULL REFERENCES torrent_download(infohash),
+                crc32 TEXT NOT NULL,
+                prefer_extended INTEGER NOT NULL DEFAULT 0,
+                file_path_torrent TEXT,
+                file_path_disk TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        con.commit()
 
 
 # --- torrent_download helpers ---
 
 
 def create_torrent_download(infohash: str):
-    cur.execute(
-        "INSERT OR IGNORE INTO torrent_download (infohash) VALUES (?)",
-        (infohash,),
-    )
-    con.commit()
+    with get_db() as con:
+        con.execute(
+            "INSERT OR IGNORE INTO torrent_download (infohash) VALUES (?)",
+            (infohash,),
+        )
+        con.commit()
 
 
 def get_torrent_download(infohash: str) -> dict | None:
-    cur.execute("SELECT * FROM torrent_download WHERE infohash = ?", (infohash,))
-    row = cur.fetchone()
-    if not row:
-        return None
-    columns = [desc[0] for desc in cur.description]
-    return dict(zip(columns, row))
+    with get_db() as con:
+        row = con.execute("SELECT * FROM torrent_download WHERE infohash = ?", (infohash,)).fetchone()
+        if not row:
+            return None
+        return dict(row)
 
 
 def get_all_torrent_downloads() -> list[dict]:
-    cur.execute("SELECT * FROM torrent_download")
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    return [dict(zip(columns, row)) for row in rows]
+    with get_db() as con:
+        rows = con.execute("SELECT * FROM torrent_download").fetchall()
+        return [dict(row) for row in rows]
 
 
 def delete_torrent_download(infohash: str):
-    cur.execute("DELETE FROM torrent_download WHERE infohash = ?", (infohash,))
-    con.commit()
+    with get_db() as con:
+        con.execute("DELETE FROM torrent_download WHERE infohash = ?", (infohash,))
+        con.commit()
 
 
 def clear_all_downloads():
-    cur.execute("DELETE FROM episode_download")
-    cur.execute("DELETE FROM torrent_download")
-    con.commit()
+    with get_db() as con:
+        con.execute("DELETE FROM episode_download")
+        con.execute("DELETE FROM torrent_download")
+        con.commit()
 
 
 # --- episode_download helpers ---
@@ -141,75 +155,72 @@ def create_episode_download(
     file_path_disk: str | None = None,
     status: str = "pending",
 ) -> int:
-    cur.execute(
-        """
-        INSERT INTO episode_download (
-            ep_id, torrent_infohash, crc32, prefer_extended,
-            file_path_torrent, file_path_disk, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            ep_id,
-            torrent_infohash,
-            crc32,
-            int(prefer_extended),
-            file_path_torrent,
-            file_path_disk,
-            status,
-        ),
-    )
-    con.commit()
-    return cur.lastrowid
+    with get_db() as con:
+        cur = con.execute(
+            """
+            INSERT INTO episode_download (
+                ep_id, torrent_infohash, crc32, prefer_extended,
+                file_path_torrent, file_path_disk, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                ep_id,
+                torrent_infohash,
+                crc32,
+                int(prefer_extended),
+                file_path_torrent,
+                file_path_disk,
+                status,
+            ),
+        )
+        con.commit()
+        return cur.lastrowid
 
 
 def get_episode_download(download_id: int) -> dict | None:
-    cur.execute("SELECT * FROM episode_download WHERE id = ?", (download_id,))
-    row = cur.fetchone()
-    if not row:
-        return None
-    columns = [desc[0] for desc in cur.description]
-    return dict(zip(columns, row))
+    with get_db() as con:
+        row = con.execute("SELECT * FROM episode_download WHERE id = ?", (download_id,)).fetchone()
+        if not row:
+            return None
+        return dict(row)
 
 
 def get_episode_download_by_ep_id(ep_id: str) -> dict | None:
-    cur.execute("SELECT * FROM episode_download WHERE ep_id = ?", (ep_id,))
-    row = cur.fetchone()
-    if not row:
-        return None
-    columns = [desc[0] for desc in cur.description]
-    return dict(zip(columns, row))
+    with get_db() as con:
+        row = con.execute("SELECT * FROM episode_download WHERE ep_id = ?", (ep_id,)).fetchone()
+        if not row:
+            return None
+        return dict(row)
 
 
 def get_episode_downloads_by_torrent(torrent_infohash: str) -> list[dict]:
-    cur.execute(
-        "SELECT * FROM episode_download WHERE torrent_infohash = ?",
-        (torrent_infohash,),
-    )
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    return [dict(zip(columns, row)) for row in rows]
+    with get_db() as con:
+        rows = con.execute(
+            "SELECT * FROM episode_download WHERE torrent_infohash = ?",
+            (torrent_infohash,),
+        ).fetchall()
+        return [dict(row) for row in rows]
 
 
 def get_all_episode_downloads() -> list[dict]:
-    cur.execute("SELECT * FROM episode_download")
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    return [dict(zip(columns, row)) for row in rows]
+    with get_db() as con:
+        rows = con.execute("SELECT * FROM episode_download").fetchall()
+        return [dict(row) for row in rows]
 
 
 def get_episode_downloads_by_status(status: str) -> list[dict]:
-    cur.execute("SELECT * FROM episode_download WHERE status = ?", (status,))
-    rows = cur.fetchall()
-    columns = [desc[0] for desc in cur.description]
-    return [dict(zip(columns, row)) for row in rows]
+    with get_db() as con:
+        rows = con.execute("SELECT * FROM episode_download WHERE status = ?", (status,)).fetchall()
+        return [dict(row) for row in rows]
 
 
 def update_episode_download_status(download_id: int, status: str):
-    cur.execute(
-        "UPDATE episode_download SET status = ? WHERE id = ?",
-        (status, download_id),
-    )
-    con.commit()
+    with get_db() as con:
+        con.execute(
+            "UPDATE episode_download SET status = ? WHERE id = ?",
+            (status, download_id),
+        )
+        con.commit()
 
 
 def update_episode_download_paths(
@@ -217,30 +228,33 @@ def update_episode_download_paths(
     file_path_torrent: str | None = None,
     file_path_disk: str | None = None,
 ):
-    if file_path_torrent is not None:
-        cur.execute(
-            "UPDATE episode_download SET file_path_torrent = ? WHERE id = ?",
-            (file_path_torrent, download_id),
-        )
-    if file_path_disk is not None:
-        cur.execute(
-            "UPDATE episode_download SET file_path_disk = ? WHERE id = ?",
-            (file_path_disk, download_id),
-        )
-    con.commit()
+    with get_db() as con:
+        if file_path_torrent is not None:
+            con.execute(
+                "UPDATE episode_download SET file_path_torrent = ? WHERE id = ?",
+                (file_path_torrent, download_id),
+            )
+        if file_path_disk is not None:
+            con.execute(
+                "UPDATE episode_download SET file_path_disk = ? WHERE id = ?",
+                (file_path_disk, download_id),
+            )
+        con.commit()
 
 
 def delete_episode_download(download_id: int):
-    cur.execute("DELETE FROM episode_download WHERE id = ?", (download_id,))
-    con.commit()
+    with get_db() as con:
+        con.execute("DELETE FROM episode_download WHERE id = ?", (download_id,))
+        con.commit()
 
 
 def delete_episode_downloads_by_torrent(torrent_infohash: str):
-    cur.execute(
-        "DELETE FROM episode_download WHERE torrent_infohash = ?",
-        (torrent_infohash,),
-    )
-    con.commit()
+    with get_db() as con:
+        con.execute(
+            "DELETE FROM episode_download WHERE torrent_infohash = ?",
+            (torrent_infohash,),
+        )
+        con.commit()
 
 
 def _get_env_value(field: str):
@@ -269,14 +283,13 @@ def get_settings() -> dict | None:
       - env_override: True if an environment variable is overriding the db value
     """
     logger.debug("Fetching settings from database")
-    cur.execute("SELECT * FROM settings WHERE singleton = 1")
-    row = cur.fetchone()
-    if not row:
-        logger.warning("No settings found in database")
-        return None
+    with get_db() as con:
+        row = con.execute("SELECT * FROM settings WHERE singleton = 1").fetchone()
+        if not row:
+            logger.warning("No settings found in database")
+            return None
 
-    columns = [desc[0] for desc in cur.description]
-    db_settings = dict(zip(columns, row))
+        db_settings = dict(row)
 
     result = {}
     for field in SETTINGS_FIELDS:
@@ -303,36 +316,37 @@ def save_settings(
     qbt_polling_rate: int = 10,
     log_level: str = "INFO",
 ):
-    cur.execute(
-        """
-        INSERT INTO settings (
-            singleton, media_data_location, prefer_extended, qbt_hostname,
-            qbt_username, qbt_password, qbt_path_mapping, qbt_category,
-            qbt_download_location, qbt_polling_rate, log_level
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(singleton) DO UPDATE SET
-            media_data_location = excluded.media_data_location,
-            prefer_extended = excluded.prefer_extended,
-            qbt_hostname = excluded.qbt_hostname,
-            qbt_username = excluded.qbt_username,
-            qbt_password = excluded.qbt_password,
-            qbt_path_mapping = excluded.qbt_path_mapping,
-            qbt_category = excluded.qbt_category,
-            qbt_download_location = excluded.qbt_download_location,
-            log_level = excluded.log_level
-        """,
-        (
-            media_data_location,
-            int(prefer_extended),
-            qbt_hostname,
-            qbt_username,
-            qbt_password,
-            qbt_path_mapping,
-            qbt_category,
-            qbt_download_location,
-            qbt_polling_rate,
-            log_level,
-        ),
-    )
-    con.commit()
-    logger.info("Settings saved successfully")
+    with get_db() as con:
+        con.execute(
+            """
+            INSERT INTO settings (
+                singleton, media_data_location, prefer_extended, qbt_hostname,
+                qbt_username, qbt_password, qbt_path_mapping, qbt_category,
+                qbt_download_location, qbt_polling_rate, log_level
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(singleton) DO UPDATE SET
+                media_data_location = excluded.media_data_location,
+                prefer_extended = excluded.prefer_extended,
+                qbt_hostname = excluded.qbt_hostname,
+                qbt_username = excluded.qbt_username,
+                qbt_password = excluded.qbt_password,
+                qbt_path_mapping = excluded.qbt_path_mapping,
+                qbt_category = excluded.qbt_category,
+                qbt_download_location = excluded.qbt_download_location,
+                log_level = excluded.log_level
+            """,
+            (
+                media_data_location,
+                int(prefer_extended),
+                qbt_hostname,
+                qbt_username,
+                qbt_password,
+                qbt_path_mapping,
+                qbt_category,
+                qbt_download_location,
+                qbt_polling_rate,
+                log_level,
+            ),
+        )
+        con.commit()
+        logger.info("Settings saved successfully")

@@ -1,4 +1,5 @@
 import os
+import signal
 import time
 import zlib
 from pathlib import Path
@@ -74,21 +75,19 @@ if __name__ == "__main__":
     # qbt_client.start_torrent(info_hash)
     
     download_manager = DownloadManager(qbt_client, metadata_mapping)
-    # download_manager.download_episode(metadata_mapping[1]['id'])
-    # download_manager.remove_episode(metadata_mapping[1]['id'])
-    
-    # logger.debug("Paused torrent with info hash: %s", info_hash)
-    # torrent_info = qbt_client.get_torrent_info(info_hash)
-    # time.sleep(5)
-    # qbt_client.stop_torrent(info_hash)
-    # example_episode = metadata_mapping[0]
-    # example_episode = metadata_mapping[0]
-    # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
-    # logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
-    # example_episode = metadata_mapping[33]
-    # nyaa_resource = get_nyaa_resource_for_episode(example_episode)
-    # logger.debug("Magnet link: %s", get_magnet_link(nyaa_resource))
-    # logger.debug(example_episode)
-    # nyaa_id = extract_nyaa_id(example_episode)
-    # logger.debug("Example episode NyaaSi ID: %s", nyaa_id)
-    # save_metadata_mapping(metadata_mapping, media_data_location)
+    download_manager.download_episode(metadata_mapping[1]['id'])
+    download_manager.start_polling()
+
+    def shutdown(signum, frame):
+        logger.info("Received signal %s, shutting down", signum)
+        download_manager.stop_polling()
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    try:
+        signal.pause()
+    except AttributeError:
+        # signal.pause() not available on Windows
+        while download_manager._polling:
+            time.sleep(1)
