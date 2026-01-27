@@ -26,7 +26,7 @@ from data_sources import (
     refresh_onepace_sheet,
 )
 from metadata import build_episode_mapping, save_metadata_mapping
-from nyaa_utils import extract_nyaa_id, get_magnet_link, get_nyaa_resource_for_episode
+from nyaa_utils import extract_nyaa_id, get_nyaa_resource_for_episode
 
 
 def calculate_crc32(filepath: str) -> str:
