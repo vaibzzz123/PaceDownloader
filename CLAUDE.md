@@ -8,7 +8,9 @@ One Pace Jellyfin Web UI - A web app with a Python backend that automates downlo
 
 ## MCP Settings:
 
-Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
+Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask, Unless the conversation is about Svelte, at which point use the Svelte MCP server below.
+
+You have access to the Chrome DevTools MCP for web related tasks as well.
 
 You are able to use the Svelte MCP server, where you have access to comprehensive Svelte 5 and SvelteKit documentation. Here's how to use the available tools effectively:
 
