@@ -1,5 +1,6 @@
 <script lang="ts">
-  import * as Table from "../ui/table";
+  import SpoilerText from "../SpoilerText/SpoilerText.svelte";
+import * as Table from "../ui/table";
   let { episodes, season } = $props();
 
   function statusStyle(status: string) {
@@ -31,7 +32,7 @@
       >
         <Table.Cell>{season}</Table.Cell>
         <Table.Cell>{episode.number}</Table.Cell>
-        <Table.Cell>{episode.title}</Table.Cell>
+        <Table.Cell><SpoilerText>{episode.title}</SpoilerText></Table.Cell>
         <Table.Cell>{episode.duration}</Table.Cell>
         <Table.Cell>{episode.status}</Table.Cell>
       </Table.Row>
