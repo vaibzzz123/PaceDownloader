@@ -1,8 +1,5 @@
 <script>
-	import { Button } from '$lib/components/ui/button';
-	let count = $state(0);
+	import SeasonGrid from '$lib/components/SeasonGrid/SeasonGrid.svelte';
 </script>
 
-<h1>One Pace Jellyfin Web UI</h1>
-<p>Clicks: {count}</p>
-<Button onclick={() => count++}>Increment</Button>
+<SeasonGrid />
