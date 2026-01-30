@@ -3,6 +3,7 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant spoiler (&:is(.spoiler *));
 
 :root {
   --radius: 0.625rem;
