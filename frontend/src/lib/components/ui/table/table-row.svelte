@@ -14,10 +14,16 @@
 	bind:this={ref}
 	data-slot="table-row"
 	class={cn(
-		"hover:[&,&>svelte-css-wrapper]:[&>th,td]:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
+		"data-[state=selected]:bg-muted border-b transition-colors",
 		className
 	)}
 	{...restProps}
 >
 	{@render children?.()}
 </tr>
+
+<style>
+	tr:hover > :global(:is(th, td)) {
+		background-color: var(--row-hover, color-mix(in oklch, var(--color-muted) 50%, transparent));
+	}
+</style>
