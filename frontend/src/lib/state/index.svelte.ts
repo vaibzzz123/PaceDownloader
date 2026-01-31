@@ -13,12 +13,12 @@ const defaults = {
   spoilerMode: false
 };
 
-export const state = $state({ ...defaults, ...loadState() });
+export const appState = $state({ ...defaults, ...loadState() });
 
 $effect.root(() => {
   $effect(() => {
     // Access each property so Svelte tracks them
-    const snapshot = { darkMode: state.darkMode, spoilerMode: state.spoilerMode };
+    const snapshot = { darkMode: appState.darkMode, spoilerMode: appState.spoilerMode };
     localStorage.setItem('app-state', JSON.stringify(snapshot));
   });
 });

@@ -1,25 +1,20 @@
 <script>
 	import '../app.css';
-	import { state } from '$lib/state/index.svelte';
+	import { appState } from '$lib/state/index.svelte';
+  import LeftSideMenu from '$lib/components/LeftSideMenu/LeftSideMenu.svelte';
 
 	let { children } = $props();
 
 	$effect(() => {
-		document.documentElement.classList.toggle('dark', state.darkMode);
-		document.documentElement.classList.toggle('spoiler', state.spoilerMode);
+		document.documentElement.classList.toggle('dark', appState.darkMode);
+		document.documentElement.classList.toggle('spoiler', appState.spoilerMode);
 	});
 </script>
 
-<nav>
-	<button onclick={() => state.darkMode = !state.darkMode}>
-		{state.darkMode ? 'Light Mode' : 'Dark Mode'}
-	</button>
+<div class="fixed top-0 left-0 z-40 p-2 m-auto">
+	<LeftSideMenu />
+</div>
 
-	<button onclick={() => state.spoilerMode = !state.spoilerMode}>
-		{state.spoilerMode ? 'Show Spoilers' : 'Hide Spoilers'}
-	</button>
-</nav>
-
-<main>
+<main class="pt-12">
 	{@render children()}
 </main>
