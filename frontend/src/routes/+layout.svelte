@@ -4,6 +4,7 @@
   import LeftSideMenu from '$lib/components/LeftSideMenu/LeftSideMenu.svelte';
 
 	let { children } = $props();
+	let menuWidth = $state(0);
 
 	$effect(() => {
 		document.documentElement.classList.toggle('dark', appState.darkMode);
@@ -11,10 +12,9 @@
 	});
 </script>
 
-<div class="fixed top-0 left-0 z-40 p-2 m-auto">
+<div class="w-fit p-2" bind:clientWidth={menuWidth}>
 	<LeftSideMenu />
 </div>
-
-<main class="pt-12">
+<main class="px-8" style:padding-left="{menuWidth}px">
 	{@render children()}
 </main>
