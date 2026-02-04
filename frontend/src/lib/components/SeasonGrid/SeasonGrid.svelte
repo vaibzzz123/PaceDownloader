@@ -1,5 +1,6 @@
 <script lang="ts">
-  import SeasonCard from "../SeasonCard/SeasonCard.svelte";
+  // import SeasonCard from "../SeasonCard/SeasonCard.svelte";
+  import SeasonCard from "../SeasonCardSkeleton/SeasonCardSkeleton.svelte";
 
   // Glob import posters and season NFOs
   const posterModules: Record<string, string> = import.meta.glob(
