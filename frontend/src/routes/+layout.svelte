@@ -1,20 +1,21 @@
 <script>
-	import '../app.css';
-	import { appState } from '$lib/state/index.svelte';
-  import LeftSideMenu from '$lib/components/LeftSideMenu/LeftSideMenu.svelte';
+  import "../app.css";
+  import { appState } from "$lib/state/index.svelte";
+  import LeftSideMenu from "$lib/components/LeftSideMenu/LeftSideMenu.svelte";
 
-	let { children } = $props();
-	let menuWidth = $state(0);
+  let { children } = $props();
 
-	$effect(() => {
-		document.documentElement.classList.toggle('dark', appState.darkMode);
-		document.documentElement.classList.toggle('spoiler', appState.spoilerMode);
-	});
+  $effect(() => {
+    document.documentElement.classList.toggle("dark", appState.darkMode);
+    document.documentElement.classList.toggle("spoiler", appState.spoilerMode);
+  });
 </script>
 
-<div class="w-fit p-2" bind:clientWidth={menuWidth}>
-	<LeftSideMenu />
+<div class="grid grid-cols-[auto_1fr]">
+  <aside class="sticky top-0  h-screen py-4 px-2">
+    <LeftSideMenu />
+  </aside>
+  <main class="col-span-1 p-4 space-y-4">
+    {@render children()}
+  </main>
 </div>
-<main class="px-8" style:padding-left="{menuWidth}px">
-	{@render children()}
-</main>
