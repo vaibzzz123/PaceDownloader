@@ -4,6 +4,6 @@
   let { children }: { children: Snippet } = $props();
 </script>
 
-<span class="spoiler:bg-foreground spoiler:text-transparent spoiler:select-none rounded-sm transition-colors">
+<span class="spoiler:bg-surface-950 dark:spoiler:bg-surface-50 spoiler:text-transparent spoiler:select-none rounded-sm transition-colors">
   {@render children()}
 </span>
