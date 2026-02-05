@@ -4,12 +4,12 @@
 
   // Glob import posters and season NFOs
   const posterModules: Record<string, string> = import.meta.glob(
-    '../../../../../backend/data/eps-metadata/One Pace/Season */poster.png',
+    '$data/eps-metadata/One Pace/Season */poster.png',
     { eager: true, import: 'default' }
   );
 
   const nfoModules: Record<string, string> = import.meta.glob(
-    '../../../../../backend/data/eps-metadata/One Pace/Season */season.nfo',
+    '$data/eps-metadata/One Pace/Season */season.nfo',
     { eager: true, as: 'raw' }
   );
 
