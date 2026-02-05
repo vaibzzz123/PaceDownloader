@@ -5,10 +5,12 @@
   let { seasonNum, title, imagePath, description } = $props();
 </script>
 
-<div class="flex justify-between">
-  <SeasonCard {title} {imagePath} {seasonNum} gridMode={false}/>
-  <div class="ml-10 w-2/3">
+<div class="flex">
+  <div class="shrink-0">
+    <SeasonCard {title} {imagePath} {seasonNum} gridMode={false}/>
+  </div>
+  <div class="ml-10 min-w-0 overflow-y-auto">
     <h1 class="text-3xl font-bold h1">Description:</h1>
-    <p class="text-gray-400 mt-2"><SpoilerText>{description}</SpoilerText></p>
+    <p class="text-gray-600 dark:text-gray-400 mt-2"><SpoilerText>{description}</SpoilerText></p>
   </div>
 </div>

@@ -15,7 +15,7 @@
 
 <div class="table-wrap">
   <table class="table">
-    <thead>
+    <thead class="text-black dark:text-white">
       <tr>
         <th>Season</th>
         <th>Episode</th>
