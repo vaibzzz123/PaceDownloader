@@ -37,8 +37,8 @@
     .sort((a, b) => a.seasonNum - b.seasonNum);
 </script>
 
-<div class="flex flex-wrap gap-6 m-10">
+<div class="flex flex-wrap gap-6">
   {#each seasonInfo as season}
-    <SeasonCard {...season} />
+    <SeasonCard {...season} gridMode={true}/>
   {/each}
 </div>

@@ -15,7 +15,7 @@
   <aside class="sticky top-0  h-screen py-4 px-2">
     <LeftSideMenu />
   </aside>
-  <main class="col-span-1 p-4 space-y-4">
+  <main class="col-span-1 p-4 space-y-4 m-10">
     {@render children()}
   </main>
 </div>
