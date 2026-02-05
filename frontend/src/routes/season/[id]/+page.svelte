@@ -5,6 +5,7 @@
   const pageData = {
     imagePath: '../../../backend/data/eps-metadata/One Pace/Season 1/poster.png',
     title: 'Romance Dawn',
+    description: 'Monkey D. Luffy sets out on an adventure to form a crew, find the legendary One Piece, and become the pirate king.',
     episodes: [
       { number: 1, title: 'Romance Dawn, the Dawn of an Adventure', duration: '24 min', status: 'Hardlinked' },
       { number: 2, title: 'They Call Him Straw Hat Luffy', duration: '22 min', status: 'Copied' },
