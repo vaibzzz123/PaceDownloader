@@ -1,6 +1,6 @@
 <script>
   import { page } from '$app/state';
-  import EpisodeList from '$lib/components/EpisodeList/EpisodeList.svelte';
+  import EpisodeList from '$lib/components/EpisodeListSkeleton/EpisodeListSkeleton.svelte';
 
   const pageData = {
     imagePath: '../../../backend/data/eps-metadata/One Pace/Season 1/poster.png',
