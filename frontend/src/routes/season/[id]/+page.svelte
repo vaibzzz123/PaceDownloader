@@ -2,6 +2,11 @@
   import { page } from '$app/state';
   import SeasonInfo from '$lib/components/SeasonInfoSkeleton/SeasonInfoSkeleton.svelte';
   import ColorTable from '$lib/components/ColorTable/ColorTable.svelte';
+  import SpoilerText from '$lib/components/SpoilerText/SpoilerText.svelte';
+  import DownloadIcon from "@lucide/svelte/icons/download";
+  import PauseIcon from "@lucide/svelte/icons/pause";
+  import PlayIcon from "@lucide/svelte/icons/play";
+  import Trash2Icon from "@lucide/svelte/icons/trash-2";
 
   const posters = import.meta.glob('$data/eps-metadata/One Pace/Season */poster.png', { eager: true, import: 'default' });
 
@@ -14,11 +19,6 @@
     imagePath: getPoster(page.params.id),
     title: 'Romance Dawn',
     description: 'Monkey D. Luffy sets out on an adventure to form a crew, find the legendary One Piece, and become the pirate king.',
-    // description: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna
-    // aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure
-    // dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident,
-    // sunt in culpa qui officia deserunt mollit anim id est laborum.`,
-    // description: "The Straw Hats' next destination is Fishman Island, but first they must traverse the dreaded Florian Triangle which is known for many eerie and mysterious things such as disappearing crews, conversational skeletons, and a floating island full of zombies and other horrors.",
     episodes: [
       { ep_id: 1, season: page.params.id, number: 1, title: 'Romance Dawn, the Dawn of an Adventure', duration: '24 min', status: 'Hardlinked' },
       { ep_id: 2, season: page.params.id, number: 2, title: 'They Call Him Straw Hat Luffy', duration: '22 min', status: 'Copied' },
@@ -27,17 +27,32 @@
       { ep_id: 5, season: page.params.id, number: 5, title: 'Extra', duration: '22 min', status: 'Not Downloaded' },
     ]
   }
+
+  let isDownloadRunning = $state(false);
 </script>
 
 <div class="flex flex-col gap-20">
   <SeasonInfo seasonNum={page.params.id} title={pageData.title} imagePath={pageData.imagePath} description={pageData.description} />
-  <ColorTable 
-    data={pageData.episodes}
-    spoilerName={true}
-    headerMappings={{
-      title: 'Name',
-    }}
-    actionsColumn={true}
-    hiddenColumns={['ep_id']}
-  />
+  <ColorTable data={pageData.episodes}>
+    {#snippet header()}
+      <th>Season</th>
+      <th>Episode</th>
+      <th>Name</th>
+      <th>Duration</th>
+      <th>Status</th>
+      <th>Actions</th>
+    {/snippet}
+    {#snippet row(episode)}
+      <td>{episode.season}</td>
+      <td>{episode.number}</td>
+      <td><SpoilerText>{episode.title}</SpoilerText></td>
+      <td>{episode.duration}</td>
+      <td>{episode.status}</td>
+      <td>
+        <button class="btn-icon" disabled={isDownloadRunning}><DownloadIcon /></button>
+        <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
+        <button class="btn-icon"><Trash2Icon /></button>
+      </td>
+    {/snippet}
+  </ColorTable>
 </div>
