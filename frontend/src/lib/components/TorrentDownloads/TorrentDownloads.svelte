@@ -1,5 +1,9 @@
 <script lang="ts">
-  
+  interface Props {
+    highlightId?: string;
+  }
+
+  let { highlightId }: Props = $props();
 </script>
 
 <div>
