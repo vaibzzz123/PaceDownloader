@@ -10,8 +10,10 @@
   function statusStyle(status: string) {
     const colors: Record<string, { bg: string; hover: string }> = {
       'Hardlinked': { bg: 'bg-green-500/20', hover: 'hover:bg-green-500/30' },
-      'Copied': { bg: 'bg-purple-500/20', hover: 'hover:bg-purple-500/30' },
-      'Downloading': { bg: 'bg-yellow-500/20', hover: 'hover:bg-yellow-500/30' },
+      'Copied': { bg: 'bg-green-500/20', hover: 'hover:bg-green-500/30' },
+      'Downloading': { bg: 'bg-purple-500/20', hover: 'hover:bg-purple-500/30' },
+      'Paused': { bg: 'bg-yellow-500/20', hover: 'hover:bg-yellow-500/30' },
+      'Download Complete': { bg: 'bg-blue-500/20', hover: 'hover:bg-blue-500/30' },
       'Error': { bg: 'bg-red-500/20', hover: 'hover:bg-red-500/30' },
     };
     return colors[status] ?? null;
