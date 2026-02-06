@@ -5,8 +5,12 @@
   import MoonIcon from "@lucide/svelte/icons/moon";
   import EyeIcon from "@lucide/svelte/icons/eye";
   import EyeOffIcon from "@lucide/svelte/icons/eye-off";
+  import BackArrowIcon from "@lucide/svelte/icons/arrow-left";
   import { Dialog, Portal } from '@skeletonlabs/skeleton-svelte';
   import { appState } from "$lib/state/index.svelte";
+  import { page } from "$app/state";
+
+  const isOnHomePage: boolean = $derived(page.url.pathname === '/');
 
   let open = $state(false);
 
@@ -25,6 +29,11 @@
     <MenuIcon class="size-6" />
     <span class="sr-only">Open menu</span>
   </Dialog.Trigger>
+  {#if !isOnHomePage}
+    <a class="absolute top-4 left-14 btn-icon btn-icon-lg hover:preset-tonal" href="/">
+      <BackArrowIcon />
+    </a>
+  {/if}
   <Portal>
     <Dialog.Backdrop class="fixed inset-0 z-50 bg-surface-50-950/50 backdrop-blur-sm {animBackdrop}" />
     <Dialog.Positioner class="fixed inset-0 z-50 flex justify-start">
