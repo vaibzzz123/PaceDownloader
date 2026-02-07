@@ -11,12 +11,12 @@
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
   const downloadsTableData = [
-    { ep_id: 1, name: 'Romance Dawn, the Dawn of an Adventure', extended: true, status: 'Downloading', progress: 50, torrent_id: 1, torrent_name: 'Romance Dawn' },
-    { ep_id: 2, name: 'Episode 2', extended: false, status: 'Download Complete', progress: 100, torrent_id: 1, torrent_name: 'Romance Dawn' },
-    { ep_id: 3, name: 'Episode 3', extended: false, status: 'Error', progress: 0, torrent_id: 3, torrent_name: 'Syrup Village' },
-    { ep_id: 4, name: 'Episode 4', extended: false, status: 'Paused', progress: 25, torrent_id: 2, torrent_name: 'Orange Town' },
-    { ep_id: 5, name: 'Episode 5', extended: false, status: 'Hardlinked', progress: 100, torrent_id: 1, torrent_name: 'Romance Dawn' },
-    { ep_id: 6, name: 'Episode 6', extended: false, status: 'Copied', progress: 100, torrent_id: 2, torrent_name: 'Orange Town' },
+    { ep_id: 1, season: 1, name: 'Romance Dawn, the Dawn of an Adventure', extended: true, status: 'Downloading', progress: 50, torrent_id: 1, torrent_name: 'Romance Dawn' },
+    { ep_id: 2, season: 1, name: 'Episode 2', extended: false, status: 'Download Complete', progress: 100, torrent_id: 1, torrent_name: 'Romance Dawn' },
+    { ep_id: 3, season: 3, name: 'Episode 3', extended: false, status: 'Error', progress: 0, torrent_id: 3, torrent_name: 'Syrup Village' },
+    { ep_id: 4, season: 2, name: 'Episode 4', extended: false, status: 'Paused', progress: 25, torrent_id: 2, torrent_name: 'Orange Town' },
+    { ep_id: 5, season: 1, name: 'Episode 5', extended: false, status: 'Hardlinked', progress: 100, torrent_id: 1, torrent_name: 'Romance Dawn' },
+    { ep_id: 6, season: 2, name: 'Episode 6', extended: false, status: 'Copied', progress: 100, torrent_id: 2, torrent_name: 'Orange Town' },
   ];
 
   let isDownloadRunning = $state(false);
@@ -44,11 +44,11 @@
       {/snippet}
       {#snippet row(item)}
         <td>{item.ep_id}</td>
-        <td>{item.name}</td>
+        <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}>{item.name}</a></td>
         <td>{item.extended ? 'Yes' : 'No'}</td>
         <td>{item.status}</td>
         <td>{item.progress}%</td>
-        <td><a href={`/downloads?tab=torrents&id=${item.torrent_id}`}>{item.torrent_name}</a></td>
+        <td><a class="text-blue-500 hover:underline" href={`/downloads?tab=torrents&id=${item.torrent_id}`}>{item.torrent_name}</a></td>
         <td>
           <button class="btn-icon" disabled={isDownloadRunning}><DownloadIcon /></button>
           <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
