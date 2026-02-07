@@ -64,7 +64,7 @@
     </ColorTable>
   </Tabs.Content>
   <Tabs.Content value="torrents">
-    <ColorTable data={torrentDownloadsTableData} searchBox={true} searchableFields={['name', 'ep_ids', 'ep_names']}>
+    <ColorTable data={torrentDownloadsTableData} searchBox={true} searchableFields={['name', 'status','ep_ids', 'ep_names']}>
       {#snippet header()}
         <th>Name</th>
         <th>Status</th>
