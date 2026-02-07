@@ -10,13 +10,19 @@
 
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
-  const downloadsTableData = [
+  const episodeDownloadsTableData = [
     { ep_id: 1, season: 1, name: 'Romance Dawn, the Dawn of an Adventure', extended: true, status: 'Downloading', progress: 50, torrent_id: 1, torrent_name: 'Romance Dawn' },
     { ep_id: 2, season: 1, name: 'Episode 2', extended: false, status: 'Download Complete', progress: 100, torrent_id: 1, torrent_name: 'Romance Dawn' },
     { ep_id: 3, season: 3, name: 'Episode 3', extended: false, status: 'Error', progress: 0, torrent_id: 3, torrent_name: 'Syrup Village' },
     { ep_id: 4, season: 2, name: 'Episode 4', extended: false, status: 'Paused', progress: 25, torrent_id: 2, torrent_name: 'Orange Town' },
     { ep_id: 5, season: 1, name: 'Episode 5', extended: false, status: 'Hardlinked', progress: 100, torrent_id: 1, torrent_name: 'Romance Dawn' },
     { ep_id: 6, season: 2, name: 'Episode 6', extended: false, status: 'Copied', progress: 100, torrent_id: 2, torrent_name: 'Orange Town' },
+  ];
+
+  const torrentDownloadsTableData = [
+    { id: 1, name: 'Romance Dawn', status: 'Downloading', progress: 50, ep_ids: [1, 2] },
+    { id: 2, name: 'Orange Town', status: 'Paused', progress: 25, ep_ids: [4] },
+    { id: 3, name: 'Syrup Village', status: 'Error', progress: 0, ep_ids: [3] },
   ];
 
   let isDownloadRunning = $state(false);
@@ -32,13 +38,14 @@
     <Tabs.Indicator />
   </Tabs.List>
   <Tabs.Content value="episodes">
-    <ColorTable data={downloadsTableData}>
+    <span class="chip bg-black/10 dark:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
+    <ColorTable data={episodeDownloadsTableData}>
       {#snippet header()}
         <th>Episode ID</th>
         <th>Name</th>
         <th>Extended</th>
         <th>Status</th>
-        <th>Progress</th>
+        <th>Download Progress</th>
         <th>Torrent</th>
         <th>Actions</th>
       {/snippet}
@@ -50,7 +57,6 @@
         <td>{item.progress}%</td>
         <td><a class="text-blue-500 hover:underline" href={`/downloads?tab=torrents&id=${item.torrent_id}`}>{item.torrent_name}</a></td>
         <td>
-          <button class="btn-icon" disabled={isDownloadRunning}><DownloadIcon /></button>
           <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
           <button class="btn-icon"><Trash2Icon /></button>
         </td>
@@ -58,7 +64,32 @@
     </ColorTable>
   </Tabs.Content>
   <Tabs.Content value="torrents">
-    <TorrentDownloads {highlightId} />
+    <ColorTable data={torrentDownloadsTableData}>
+      {#snippet header()}
+        <th>Name</th>
+        <th>Status</th>
+        <th>Download Progress</th>
+        <th>Episodes</th>
+        <th>Actions</th>
+      {/snippet}
+      {#snippet row(item)}
+        <td>{item.name}</td>
+        <td>{item.status}</td>
+        <td>{item.progress}%</td>
+        <td>
+          {#each item.ep_ids as ep_id}
+            {#if ep_id !== item.ep_ids[0]}
+              &nbsp; <!-- adds whitespace separator -->
+            {/if}
+            <a class="text-blue-500 hover:underline" href={`/downloads/?tab=episodes&id=${ep_id}`}>{ep_id}</a>
+          {/each}
+        </td>
+        <td>
+          <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
+          <button class="btn-icon"><Trash2Icon /></button>
+        </td>
+      {/snippet}
+    </ColorTable>
   </Tabs.Content>
 </Tabs>
 {/key}
