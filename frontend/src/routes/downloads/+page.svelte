@@ -24,7 +24,8 @@
 
 <h1 class="-mt-2 text-2xl font-bold">Downloads</h1>
 {#key page.url.search}
-<Tabs defaultValue={page.url.searchParams.get("tab") ?? "episodes"}>
+<!-- Need to do this onValueChange to update the URL when the tab changes, at the browser level above SvelteKit -->
+<Tabs defaultValue={page.url.searchParams.get("tab") ?? "episodes"} onValueChange={(details) => history.replaceState(null, '', `?tab=${details.value}`)}>
   <Tabs.List>
     <Tabs.Trigger class="flex-1" value="episodes">Episodes</Tabs.Trigger>
     <Tabs.Trigger class="flex-1" value="torrents">Torrents</Tabs.Trigger>
