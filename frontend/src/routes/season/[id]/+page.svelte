@@ -31,9 +31,9 @@
   let isDownloadRunning = $state(false);
 </script>
 
-<div class="flex flex-col gap-20">
+<div class="flex flex-col gap-6">
   <SeasonInfo seasonNum={page.params.id} title={pageData.title} imagePath={pageData.imagePath} description={pageData.description} />
-  <ColorTable data={pageData.episodes}>
+  <ColorTable data={pageData.episodes} searchBox={true} searchableFields={['number', 'title']}>
     {#snippet header()}
       <th>Season</th>
       <th>Episode</th>

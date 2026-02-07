@@ -1,10 +1,14 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import SearchIcon from "@lucide/svelte/icons/search";
+  import Fuse from 'fuse.js';
 
-  let { data = [], header, row }: {
+  let { data = [], header, row, searchBox, searchableFields }: {
     data: any[];
     header: Snippet;
     row: Snippet<[any]>;
+    searchBox: boolean,
+    searchableFields?: string[]
   } = $props();
 
   function statusStyle(status: string) {
@@ -18,8 +22,40 @@
     };
     return colors[status] ?? null;
   }
+
+  const fuse = $derived(new Fuse(data, {
+    keys: searchableFields || [],
+    // Play with this number to adjust search sensitivity (0.0 = exact match, 1.0 = match anything)
+    threshold: 0.3,
+    // Resolve values ourselves so we see raw types (bool, number) before stringification
+    getFn: (obj: Record<string, unknown>, path: string | string[]) => {
+      const keys = Array.isArray(path) ? path : path.split('.');
+      let value: unknown = obj;
+      for (const key of keys) {
+        if (value == null) return '';
+        value = (value as Record<string, unknown>)[key];
+      }
+      const toDisplayString = (v: unknown): string => {
+        if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+        return v != null ? String(v) : '';
+      };
+      if (Array.isArray(value)) return value.map(toDisplayString);
+      return toDisplayString(value);
+    }
+  }));
+
+  let searchQuery = $state("");
+  let filteredData = $derived(searchQuery ? fuse.search(searchQuery).map(result => result.item) : data);
 </script>
 
+<div>
+{#if searchBox}
+<!-- TODO: experiment with adding max-w-xs below for compacted search box, whatever looks better -->
+  <div class="relative mb-3">
+    <SearchIcon size={16} class="absolute left-3 top-1/4 pointer-events-none" />
+    <input class="input pl-9 placeholder:text-black/40 dark:placeholder:text-white/40" type="text" bind:value={searchQuery} placeholder="Search" />
+  </div>
+{/if}
 <div class="table-wrap">
   <table class="table">
     <thead>
@@ -28,7 +64,7 @@
       </tr>
     </thead>
     <tbody>
-      {#each data as item, i (i)}
+      {#each filteredData as item, i (i)}
         {@const rowStyle = statusStyle(item.status)}
         <tr class="h-13 {rowStyle?.bg ?? ''} {rowStyle?.hover ?? 'hover:bg-black/10 dark:hover:bg-white/10'}">
           {@render row(item)}
@@ -36,4 +72,5 @@
       {/each}
     </tbody>
   </table>
+</div>
 </div>

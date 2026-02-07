@@ -20,9 +20,9 @@
   ];
 
   const torrentDownloadsTableData = [
-    { id: 1, name: 'Romance Dawn', status: 'Downloading', progress: 50, ep_ids: [1, 2] },
-    { id: 2, name: 'Orange Town', status: 'Paused', progress: 25, ep_ids: [4] },
-    { id: 3, name: 'Syrup Village', status: 'Error', progress: 0, ep_ids: [3] },
+    { id: 1, name: 'Romance Dawn', status: 'Downloading', progress: 50, ep_ids: [1, 2], ep_names: ['Romance Dawn, the Dawn of an Adventure', 'Episode 2'] },
+    { id: 2, name: 'Orange Town', status: 'Paused', progress: 25, ep_ids: [4], ep_names: ['Episode 4'] },
+    { id: 3, name: 'Syrup Village', status: 'Error', progress: 0, ep_ids: [3], ep_names: ['Episode 3'] },
   ];
 
   let isDownloadRunning = $state(false);
@@ -38,8 +38,8 @@
     <Tabs.Indicator />
   </Tabs.List>
   <Tabs.Content value="episodes">
-    <span class="mb-2 chip bg-black/10 dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
-    <ColorTable data={episodeDownloadsTableData}>
+    <span class="mb-3 chip bg-black/10 dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
+    <ColorTable data={episodeDownloadsTableData} searchBox={true} searchableFields={['ep_id', 'name','extended', 'status', 'torrent_name']}>
       {#snippet header()}
         <th>Episode ID</th>
         <th>Name</th>
@@ -64,7 +64,7 @@
     </ColorTable>
   </Tabs.Content>
   <Tabs.Content value="torrents">
-    <ColorTable data={torrentDownloadsTableData}>
+    <ColorTable data={torrentDownloadsTableData} searchBox={true} searchableFields={['name', 'ep_ids', 'ep_names']}>
       {#snippet header()}
         <th>Name</th>
         <th>Status</th>
@@ -77,8 +77,8 @@
         <td>{item.status}</td>
         <td>{item.progress}%</td>
         <td>
-          {#each item.ep_ids as ep_id}
-            {#if ep_id !== item.ep_ids[0]}
+          {#each item.ep_ids as ep_id, index}
+            {#if index !== 0}
               &nbsp; <!-- adds whitespace separator -->
             {/if}
             <a class="text-blue-500 hover:underline" href={`/downloads/?tab=episodes&id=${ep_id}`}>{ep_id}</a>

@@ -24,6 +24,7 @@
 	"dependencies": {
 		"@tailwindcss/vite": "^4.1.18",
 		"clsx": "^2.1.1",
+		"fuse.js": "^7.1.0",
 		"shadcn-svelte": "^1.1.1",
 		"tailwind-merge": "^3.4.0",
 		"tailwindcss": "^4.1.18"
