@@ -1,12 +1,11 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { Tabs } from "@skeletonlabs/skeleton-svelte";
-  import TorrentDownloads from "$lib/components/TorrentDownloads/TorrentDownloads.svelte";
   import ColorTable from "$lib/components/ColorTable/ColorTable.svelte";
-  import DownloadIcon from "@lucide/svelte/icons/download";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
   import Trash2Icon from "@lucide/svelte/icons/trash-2";
+  import SpoilerText from "$lib/components/SpoilerText/SpoilerText.svelte";
 
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
@@ -39,7 +38,7 @@
   </Tabs.List>
   <Tabs.Content value="episodes">
     <span class="mb-3 chip bg-black/10 dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
-    <ColorTable data={episodeDownloadsTableData} searchBox={true} searchableFields={['ep_id', 'name','extended', 'status', 'torrent_name']}>
+    <ColorTable data={episodeDownloadsTableData} searchBox={true} searchableFields={['ep_id', 'name','extended', 'status', 'torrent_id', 'torrent_name']}>
       {#snippet header()}
         <th>Episode ID</th>
         <th>Name</th>
@@ -51,7 +50,7 @@
       {/snippet}
       {#snippet row(item)}
         <td>{item.ep_id}</td>
-        <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}>{item.name}</a></td>
+        <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}><SpoilerText>{item.name}</SpoilerText></a></td>
         <td>{item.extended ? 'Yes' : 'No'}</td>
         <td>{item.status}</td>
         <td>{item.progress}%</td>
