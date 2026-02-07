@@ -6,6 +6,7 @@
   import PlayIcon from "@lucide/svelte/icons/play";
   import Trash2Icon from "@lucide/svelte/icons/trash-2";
   import SpoilerText from "$lib/components/SpoilerText/SpoilerText.svelte";
+  import DownloadProgress from "$lib/components/DownloadProgress/DownloadProgress.svelte";
 
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
@@ -25,6 +26,7 @@
   ];
 
   let isDownloadRunning = $state(false);
+
 </script>
 
 <h1 class="-mt-2 text-2xl font-bold">Downloads</h1>
@@ -53,7 +55,9 @@
         <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}><SpoilerText>{item.name}</SpoilerText></a></td>
         <td>{item.extended ? 'Yes' : 'No'}</td>
         <td>{item.status}</td>
-        <td>{item.progress}%</td>
+        <td>
+          <DownloadProgress value={item.progress} status={item.status} />
+        </td>
         <td><a class="text-blue-500 hover:underline" href={`/downloads?tab=torrents&id=${item.torrent_id}`}>{item.torrent_name}</a></td>
         <td>
           <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
@@ -74,7 +78,9 @@
       {#snippet row(item)}
         <td>{item.name}</td>
         <td>{item.status}</td>
-        <td>{item.progress}%</td>
+        <td>
+          <DownloadProgress value={item.progress} status={item.status} />
+        </td>
         <td>
           {#each item.ep_ids as ep_id, index}
             {#if index !== 0}
