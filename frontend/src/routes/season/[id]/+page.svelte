@@ -47,7 +47,7 @@
       <td>{episode.number}</td>
       <td><SpoilerText>{episode.title}</SpoilerText></td>
       <td>{episode.duration}</td>
-      <td>{episode.status}</td>
+      <td>{#if episode.status !== 'Not Downloaded'}<a class="text-blue-500 hover:underline" href={`/downloads?tab=episodes&id=${episode.ep_id}`}>{episode.status}</a>{:else}{episode.status}{/if}</td>
       <td>
         <button class="btn-icon" disabled={isDownloadRunning}><DownloadIcon /></button>
         <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
