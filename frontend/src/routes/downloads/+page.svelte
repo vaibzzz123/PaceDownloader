@@ -38,7 +38,7 @@
     <Tabs.Indicator />
   </Tabs.List>
   <Tabs.Content value="episodes">
-    <span class="chip bg-black/10 dark:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
+    <span class="mb-2 chip bg-black/10 dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
     <ColorTable data={episodeDownloadsTableData}>
       {#snippet header()}
         <th>Episode ID</th>
