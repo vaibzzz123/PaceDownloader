@@ -8,7 +8,6 @@
   import PlayIcon from "@lucide/svelte/icons/play";
   import Trash2Icon from "@lucide/svelte/icons/trash-2";
 
-  const tab = $derived(page.url.searchParams.get("tab") ?? "episodes");
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
   const downloadsTableData = [
@@ -24,18 +23,12 @@
 </script>
 
 <h1 class="-mt-2 text-2xl font-bold">Downloads</h1>
-<Tabs value={tab}>
+{#key page.url.search}
+<Tabs defaultValue={page.url.searchParams.get("tab") ?? "episodes"}>
   <Tabs.List>
-    <Tabs.Trigger class="flex-1" value="episodes">
-      {#snippet element(attributes: Record<string, unknown>)}
-        <a href="/downloads?tab=episodes" {...attributes}>Episodes</a>
-      {/snippet}
-    </Tabs.Trigger>
-    <Tabs.Trigger class="flex-1" value="torrents">
-      {#snippet element(attributes: Record<string, unknown>)}
-        <a href="/downloads?tab=torrents" {...attributes}>Torrents</a>
-      {/snippet}
-    </Tabs.Trigger>
+    <Tabs.Trigger class="flex-1" value="episodes">Episodes</Tabs.Trigger>
+    <Tabs.Trigger class="flex-1" value="torrents">Torrents</Tabs.Trigger>
+    <Tabs.Indicator />
   </Tabs.List>
   <Tabs.Content value="episodes">
     <ColorTable data={downloadsTableData}>
@@ -54,7 +47,7 @@
         <td>{item.extended ? 'Yes' : 'No'}</td>
         <td>{item.status}</td>
         <td>{item.progress}%</td>
-        <td>{item.torrent_name}</td>
+        <td><a href={`/downloads?tab=torrents&id=${item.torrent_id}`}>{item.torrent_name}</a></td>
         <td>
           <button class="btn-icon" disabled={isDownloadRunning}><DownloadIcon /></button>
           <button class="btn-icon" onclick={() => isDownloadRunning = !isDownloadRunning}>{#if isDownloadRunning}<PauseIcon/>{:else}<PlayIcon/>{/if}</button>
@@ -67,3 +60,4 @@
     <TorrentDownloads {highlightId} />
   </Tabs.Content>
 </Tabs>
+{/key}
