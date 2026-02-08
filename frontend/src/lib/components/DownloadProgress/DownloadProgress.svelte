@@ -18,6 +18,5 @@
 <Progress class="grid grid-cols-[auto_1fr] items-center gap-4" {value} max={100}>
   <Progress.Label class="w-8 text-sm">{value}%</Progress.Label>
   <Progress.Track class={style?.track}>
-    <Progress.Range class={style?.range} />
-  </Progress.Track>
+    <Progress.Range class="{style?.range} transition-[width] duration-500 ease-in-out" />  </Progress.Track>
 </Progress>

@@ -51,8 +51,7 @@
         <th>Actions</th>
       {/snippet}
       {#snippet row(item)}
-        <td>{item.ep_id}</td>
-        <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}><SpoilerText>{item.name}</SpoilerText></a></td>
+        <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}>{item.ep_id}</a></td>        <td><a class="text-blue-500 hover:underline" href={`/season/${item.season}?id=${item.ep_id}`}><SpoilerText>{item.name}</SpoilerText></a></td>
         <td>{item.extended ? 'Yes' : 'No'}</td>
         <td>{item.status}</td>
         <td>
