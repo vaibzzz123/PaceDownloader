@@ -137,6 +137,7 @@ function highlight(node: HTMLTableRowElement, shouldHighlight: boolean) {
     </div>
   {/if}
   <div class="table-wrap rounded-lg overflow-hidden">
+    <!-- TODO: Add resizable table columns down the line -->
     <table class="table">
       <thead>
         <tr class="text-black dark:text-white">
