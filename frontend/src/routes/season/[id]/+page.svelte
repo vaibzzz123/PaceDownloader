@@ -8,6 +8,8 @@
   import PlayIcon from "@lucide/svelte/icons/play";
   import Trash2Icon from "@lucide/svelte/icons/trash-2";
 
+  const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
+
   const posters = import.meta.glob('$data/eps-metadata/One Pace/Season */poster.png', { eager: true, import: 'default' });
 
   function getPoster(seasonId: string | undefined) {
@@ -33,7 +35,7 @@
 
 <div class="flex flex-col gap-6">
   <SeasonInfo seasonNum={page.params.id} title={pageData.title} imagePath={pageData.imagePath} description={pageData.description} />
-  <ColorTable data={pageData.episodes} searchBox={true} searchableFields={['number', 'title']}>
+  <ColorTable data={pageData.episodes} searchBox={true} searchableFields={['number', 'title']} highlightId={highlightId} idKey="ep_id">
     {#snippet header()}
       <th>Season</th>
       <th>Episode</th>

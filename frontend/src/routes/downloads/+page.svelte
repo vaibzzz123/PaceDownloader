@@ -40,7 +40,7 @@
   </Tabs.List>
   <Tabs.Content value="episodes">
     <span class="mb-3 chip bg-black/10 dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
-    <ColorTable data={episodeDownloadsTableData} searchBox={true} searchableFields={['ep_id', 'name','extended', 'status', 'torrent_id', 'torrent_name']}>
+    <ColorTable data={episodeDownloadsTableData} searchBox={true} searchableFields={['ep_id', 'name','extended', 'status', 'torrent_id', 'torrent_name']} highlightId={highlightId} idKey="ep_id">
       {#snippet header()}
         <th>Episode ID</th>
         <th>Name</th>
@@ -66,7 +66,7 @@
     </ColorTable>
   </Tabs.Content>
   <Tabs.Content value="torrents">
-    <ColorTable data={torrentDownloadsTableData} searchBox={true} searchableFields={['name', 'status','ep_ids', 'ep_names']}>
+    <ColorTable data={torrentDownloadsTableData} searchBox={true} searchableFields={['name', 'status','ep_ids', 'ep_names']} highlightId={highlightId} idKey="id">
       {#snippet header()}
         <th>Name</th>
         <th>Status</th>
