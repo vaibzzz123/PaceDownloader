@@ -59,6 +59,8 @@ def setup_logging(log_level: str = "INFO"):
     # Set third-party loggers to WARNING to reduce noise
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("git").setLevel(logging.WARNING)
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:
