@@ -1,7 +1,6 @@
 import os
 import signal
 import time
-import zlib
 from pathlib import Path
 from fastapi import FastAPI
 
@@ -30,29 +29,6 @@ from data_sources import (
 )
 from metadata import build_episode_mapping, save_metadata_mapping
 from nyaa_utils import extract_nyaa_id, get_nyaa_resource_for_episode
-
-
-def calculate_crc32(filepath: str) -> str:
-    """Calculate CRC32 checksum of a file."""
-    crc = 0
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(65536), b""):
-            crc = zlib.crc32(chunk, crc)
-    return format(crc & 0xFFFFFFFF, "08x")
-
-
-def reset_all(qbt_client: QbittorrentClient):
-    """Remove all tracked torrents from qBittorrent (with files) and clear the DB."""
-    torrent_downloads = db.get_all_torrent_downloads()
-    for torrent in torrent_downloads:
-        try:
-            qbt_client.stop_torrent(torrent["infohash"])
-            logger.info("Removed torrent %s from qBittorrent", torrent["infohash"])
-        except Exception as e:
-            logger.warning("Failed to remove torrent %s from qBittorrent: %s", torrent["infohash"], e)
-    db.clear_all_downloads()
-    logger.info("Reset complete: all downloads cleared")
-
 
 app = FastAPI()
 app.include_router(api_router)

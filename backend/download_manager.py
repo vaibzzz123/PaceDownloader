@@ -20,6 +20,19 @@ class DownloadManager:
         self.qbt_client = qbt_client
         self.metadata_mapping = metadata_mapping
 
+    def reset_all(self):
+        """Remove all tracked torrents from qBittorrent (with files) and clear the DB."""
+        torrent_downloads = db.get_all_torrent_downloads()
+        for torrent in torrent_downloads:
+            try:
+                self.qbt_client.stop_torrent(torrent["infohash"])
+                logger.info("Removed torrent %s from qBittorrent", torrent["infohash"])
+            except Exception as e:
+                logger.warning("Failed to remove torrent %s from qBittorrent: %s", torrent["infohash"], e)
+        db.clear_all_downloads()
+        logger.info("Reset complete: all downloads cleared")
+
+
     def download_episode(self, episode_id: int, prefer_extended: bool = True):
         episode_metadata = list(
             filter(lambda x: x["id"] == episode_id, self.metadata_mapping)
