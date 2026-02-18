@@ -39,7 +39,7 @@ def _is_sheets_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
     return age_hours < max_age_hours
 
 
-def refresh_data(
+def _refresh_data(
     force: bool = False,
     max_age_hours: int = DEFAULT_MAX_AGE_HOURS,
     media_location: Path | None = None,
@@ -55,7 +55,7 @@ def refresh_data(
     if force or not _is_metadata_fresh(max_age_hours):
         fetch_episode_metadata()
         if media_location:
-            initialize_media(media_location)
+            _initialize_media(media_location)
     else:
         logger.info("Episode metadata is fresh, skipping refresh")
 
@@ -65,7 +65,7 @@ def refresh_data(
         logger.info("Sheets data is fresh, skipping refresh")
 
 
-def initialize_media(media_data_location: Path):
+def _initialize_media(media_data_location: Path):
     """Copy episode metadata files from the cloned repo to the media data location."""
     if not METADATA_CONTENT_DIR.exists():
         logger.debug("Source directory not found, fetching episode metadata")
@@ -76,7 +76,7 @@ def initialize_media(media_data_location: Path):
     logger.info("Copied metadata from '%s' to '%s'", METADATA_CONTENT_DIR, media_data_location)
 
 
-def build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
+def _build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
     """
     Build a mapping from integer season numbers to arc information.
 
@@ -131,7 +131,7 @@ def build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
     return season_map
 
 
-def parse_episode_number(ep_value: str) -> int:
+def _parse_episode_number(ep_value: str) -> int:
     """
     Extract episode number from "Arc Name ##" format.
 
@@ -152,7 +152,7 @@ def parse_episode_number(ep_value: str) -> int:
     return 1
 
 
-def find_arc_json_file(sheets_dir: Path, json_filename: str) -> Path | None:
+def _find_arc_json_file(sheets_dir: Path, json_filename: str) -> Path | None:
     """
     Find the JSON file for an arc, handling naming mismatches.
 
@@ -184,7 +184,7 @@ def find_arc_json_file(sheets_dir: Path, json_filename: str) -> Path | None:
     return None
 
 
-def load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tuple[str, int], dict]:
+def _load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tuple[str, int], dict]:
     """
     Load all arc JSON files and create a mapping from (arc_name, ep_num) to row data.
 
@@ -198,7 +198,7 @@ def load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tup
     arc_episode_map = {}
 
     for arc_info in season_map.values():
-        json_path = find_arc_json_file(sheets_dir, arc_info["json_filename"])
+        json_path = _find_arc_json_file(sheets_dir, arc_info["json_filename"])
 
         if json_path is None:
             logger.warning(
@@ -222,13 +222,13 @@ def load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tup
             if ep_col_value is None or not isinstance(ep_col_value, str):
                 continue
 
-            ep_num = parse_episode_number(ep_col_value)
+            ep_num = _parse_episode_number(ep_col_value)
             arc_episode_map[(arc_info["arc_name"], ep_num)] = row
 
     return arc_episode_map
 
 
-def parse_nfo_files(metadata_dir: Path) -> list[dict]:
+def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
     """
     Parse all episode NFO files and extract metadata from filenames.
 
@@ -269,7 +269,7 @@ def parse_nfo_files(metadata_dir: Path) -> list[dict]:
     return episodes
 
 
-def build_episode_mapping(media_location: Path) -> list[dict]:
+def _build_episode_mapping(media_location: Path) -> list[dict]:
     """
     Build a complete mapping of all One Pace episodes with metadata from NFO files
     and torrent information from Google Sheets.
@@ -295,19 +295,18 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
         - torrent_link_extended: str | None - Extended version torrent link
         - crc32_extended: str | None - Extended version CRC32 checksum
     """
-    refresh_data(media_location=media_location)
 
     # Step 1: Load and parse arc overview
     with open(SHEETS_DIR / "arc_overview.json") as f:
         arc_overview = json.load(f)
 
-    season_map = build_season_to_arc_map(arc_overview)
+    season_map = _build_season_to_arc_map(arc_overview)
 
     # Step 2: Load arc episode data
-    arc_episode_map = load_arc_episodes(SHEETS_DIR, season_map)
+    arc_episode_map = _load_arc_episodes(SHEETS_DIR, season_map)
 
     # Step 3: Parse NFO files
-    nfo_episodes = parse_nfo_files(METADATA_CONTENT_DIR)
+    nfo_episodes = _parse_nfo_files(METADATA_CONTENT_DIR)
 
     # Step 4: Build mappings
     results = []
@@ -362,10 +361,18 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
     return results
 
 
-def save_metadata_mapping(mapping: list[dict], media_location: Path):
+def _save_metadata_mapping(mapping: list[dict], media_location: Path):
     """Save the episode metadata mapping to a JSON file in the media location."""
-    output_path = media_location / "episode_metadata.json"
+    output_path = media_location / "constructed_metadata.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(mapping, f, indent=2)
-    logger.info("Saved episode metadata mapping to %s", output_path)
+    logger.info("Saved constructed metadata mapping to %s", output_path)
+
+def refresh_and_build_mapping(media_location: Path, force_refresh: bool = False, save_mapping: bool = False):
+    """Refresh data and build metadata mapping."""
+    _refresh_data(media_location=media_location, force=force_refresh)
+    mapping = _build_episode_mapping(media_location)
+    if save_mapping:
+        _save_metadata_mapping(mapping, media_location)
+    return mapping

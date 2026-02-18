@@ -10,9 +10,6 @@ load_dotenv()
 
 import db
 from logging_config import get_logger, setup_logging
-from qbittorrent import QbittorrentClient
-from download_manager import DownloadManager
-from api import router as api_router
 
 # Initialize database and logging before other imports that may log
 db.initialize_db()
@@ -22,14 +19,19 @@ setup_logging(log_level)
 
 logger = get_logger(__name__)
 
-from metadata import build_episode_mapping, initialize_media, save_metadata_mapping  # noqa: F401
-from nyaa_utils import extract_nyaa_id, get_nyaa_resource_for_episode  # noqa: F401
+from qbittorrent import QbittorrentClient
+from download_manager import DownloadManager
+from api import router as api_router
+from metadata import refresh_and_build_mapping
+
+logger.info("Starting One Pace Jellyfin backend")
+
+refresh_and_build_mapping(Path(settings["media_data_location"]["value"]), force_refresh=False, save_mapping=True)
 
 app = FastAPI()
 app.include_router(api_router)
 
 if __name__ == "__main__":
-    logger.info("Starting One Pace Jellyfin backend")
     # media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
     # # initialize_media(media_data_location)
     # metadata_mapping = build_episode_mapping(media_data_location)
