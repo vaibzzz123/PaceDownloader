@@ -2,12 +2,78 @@
 
 import json
 import re
+import shutil
+import time
 from pathlib import Path
 
-from data_sources import refresh_episode_metadata, refresh_onepace_sheet
+from data_sources import (
+    fetch_episode_metadata,
+    fetch_onepace_sheet,
+    METADATA_DIR,
+    SHEETS_DIR,
+)
 from logging_config import get_logger
 
 logger = get_logger(__name__)
+
+METADATA_CONTENT_DIR = METADATA_DIR / "One Pace"
+DEFAULT_MAX_AGE_HOURS = 24
+
+
+def _is_metadata_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
+    fetch_head = METADATA_DIR / ".git" / "FETCH_HEAD"
+    if not fetch_head.exists():
+        return False
+    age_hours = (time.time() - fetch_head.stat().st_mtime) / 3600
+    return age_hours < max_age_hours
+
+
+def _is_sheets_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
+    if not SHEETS_DIR.exists():
+        return False
+    json_files = list(SHEETS_DIR.glob("*.json"))
+    if not json_files:
+        return False
+    newest = max(json_files, key=lambda f: f.stat().st_mtime)
+    age_hours = (time.time() - newest.stat().st_mtime) / 3600
+    return age_hours < max_age_hours
+
+
+def refresh_data(
+    force: bool = False,
+    max_age_hours: int = DEFAULT_MAX_AGE_HOURS,
+    media_location: Path | None = None,
+):
+    """Refresh episode metadata and sheets data if stale.
+
+    Args:
+        force: Force refresh regardless of age.
+        max_age_hours: Maximum age in hours before data is considered stale.
+        media_location: If provided, sync metadata files to this directory
+            whenever episode metadata is refreshed.
+    """
+    if force or not _is_metadata_fresh(max_age_hours):
+        fetch_episode_metadata()
+        if media_location:
+            initialize_media(media_location)
+    else:
+        logger.info("Episode metadata is fresh, skipping refresh")
+
+    if force or not _is_sheets_fresh(max_age_hours):
+        fetch_onepace_sheet()
+    else:
+        logger.info("Sheets data is fresh, skipping refresh")
+
+
+def initialize_media(media_data_location: Path):
+    """Copy episode metadata files from the cloned repo to the media data location."""
+    if not METADATA_CONTENT_DIR.exists():
+        logger.debug("Source directory not found, fetching episode metadata")
+        fetch_episode_metadata()
+
+    media_data_location.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(METADATA_CONTENT_DIR, media_data_location, dirs_exist_ok=True)
+    logger.info("Copied metadata from '%s' to '%s'", METADATA_CONTENT_DIR, media_data_location)
 
 
 def build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
@@ -229,26 +295,19 @@ def build_episode_mapping(media_location: Path) -> list[dict]:
         - torrent_link_extended: str | None - Extended version torrent link
         - crc32_extended: str | None - Extended version CRC32 checksum
     """
-    metadata_dir = Path("data/eps-metadata/One Pace")
-    sheets_dir = Path("data/sheets")
-
-    # Ensure data is available
-    # if not metadata_dir.exists():
-    refresh_episode_metadata()
-    # if not sheets_dir.exists():
-    refresh_onepace_sheet()
+    refresh_data(media_location=media_location)
 
     # Step 1: Load and parse arc overview
-    with open(sheets_dir / "arc_overview.json") as f:
+    with open(SHEETS_DIR / "arc_overview.json") as f:
         arc_overview = json.load(f)
 
     season_map = build_season_to_arc_map(arc_overview)
 
     # Step 2: Load arc episode data
-    arc_episode_map = load_arc_episodes(sheets_dir, season_map)
+    arc_episode_map = load_arc_episodes(SHEETS_DIR, season_map)
 
     # Step 3: Parse NFO files
-    nfo_episodes = parse_nfo_files(metadata_dir)
+    nfo_episodes = parse_nfo_files(METADATA_CONTENT_DIR)
 
     # Step 4: Build mappings
     results = []

@@ -22,13 +22,8 @@ setup_logging(log_level)
 
 logger = get_logger(__name__)
 
-from data_sources import (
-    initialize_media,
-    refresh_episode_metadata,
-    refresh_onepace_sheet,
-)
-from metadata import build_episode_mapping, save_metadata_mapping
-from nyaa_utils import extract_nyaa_id, get_nyaa_resource_for_episode
+from metadata import build_episode_mapping, initialize_media, save_metadata_mapping  # noqa: F401
+from nyaa_utils import extract_nyaa_id, get_nyaa_resource_for_episode  # noqa: F401
 
 app = FastAPI()
 app.include_router(api_router)
