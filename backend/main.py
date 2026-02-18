@@ -13,6 +13,7 @@ import db
 from logging_config import get_logger, setup_logging
 from qbittorrent import QbittorrentClient
 from download_manager import DownloadManager
+from api import router as api_router
 
 # Initialize database and logging before other imports that may log
 db.initialize_db()
@@ -54,17 +55,7 @@ def reset_all(qbt_client: QbittorrentClient):
 
 
 app = FastAPI()
-@app.get("/")
-async def test():
-    return "test"
-
-@app.get("/season")
-async def get_season():
-    return "All seasons"
-
-@app.get("/season/{season_num}")
-async def get_season(season_num: int):
-    return f"Season {season_num}"
+app.include_router(api_router)
 
 if __name__ == "__main__":
     logger.info("Starting One Pace Jellyfin backend")
