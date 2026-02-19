@@ -5,6 +5,7 @@ import time
 
 from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
+from metadata import get_episodes
 from logging_config import get_logger
 import db
 
@@ -15,10 +16,8 @@ class DownloadManager:
     def __init__(
         self,
         qbt_client: QbittorrentClient | None = None,
-        metadata_mapping: list[dict] | None = None,
     ):
         self.qbt_client = qbt_client
-        self.metadata_mapping = metadata_mapping
 
     def reset_all(self):
         """Remove all tracked torrents from qBittorrent (with files) and clear the DB."""
@@ -34,9 +33,7 @@ class DownloadManager:
 
 
     def download_episode(self, episode_id: int, prefer_extended: bool = True):
-        episode_metadata = list(
-            filter(lambda x: x["id"] == episode_id, self.metadata_mapping)
-        )[0]
+        episode_metadata = next(ep for ep in get_episodes() if ep["id"] == episode_id)
 
         logger.info("Starting download for episode ID: %d", episode_id)
         nyaa_resource = get_nyaa_resource_for_episode(episode_metadata)

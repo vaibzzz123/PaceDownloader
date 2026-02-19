@@ -5,6 +5,8 @@ import re
 import shutil
 import time
 from pathlib import Path
+import xml.etree.ElementTree as ET
+import base64
 
 from data_sources import (
     fetch_episode_metadata,
@@ -18,6 +20,22 @@ logger = get_logger(__name__)
 
 METADATA_CONTENT_DIR = METADATA_DIR / "One Pace"
 DEFAULT_MAX_AGE_HOURS = 24
+
+# Module-level caches — populated by refresh_and_build_mapping(), read via accessors
+_episode_cache: list[dict] | None = None
+_season_cache: list[dict] | None = None
+
+
+def get_episodes() -> list[dict]:
+    if _episode_cache is None:
+        raise RuntimeError("Metadata not initialized — call refresh_and_build_mapping first")
+    return _episode_cache
+
+
+def get_seasons() -> list[dict]:
+    if _season_cache is None:
+        raise RuntimeError("Metadata not initialized — call refresh_and_build_mapping first")
+    return _season_cache
 
 
 def _is_metadata_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
@@ -241,6 +259,7 @@ def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
         List of dicts with keys: filename, season, episode, title
     """
     episodes = []
+    seasons = []
     filename_pattern = re.compile(r"One Pace - S(\d+)E(\d+) - (.+)")
 
     # Sort season dirs numerically (Season 2 before Season 10)
@@ -254,6 +273,31 @@ def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
     }
 
     for season_dir in season_dirs:
+        season_nfo = season_dir / "season.nfo"
+        if season_nfo.exists():
+            # Parse season NFO to get season title
+            try:
+                tree = ET.parse(season_nfo)
+                root = tree.getroot()
+                title_elem = root.find("title")
+                if title_elem is not None and title_elem.text:
+                    season_number, season_title = title_elem.text.split(".")
+                    # base64 encode the image at season_dir / "poster.png"
+                    poster_path = season_dir / "poster.png"
+                    if poster_path.exists():
+                        with open(poster_path, "rb") as f:
+                            base64_image = base64.b64encode(f.read()).decode("utf-8")
+                    else:
+                        base64_image = ""
+                    seasons.append({
+                        "num": int(season_number),
+                        "title": season_title.strip(),
+                        "image": base64_image,
+                        "description": "",
+                    })
+            except Exception as e:
+                logger.warning("Failed to parse season NFO %s: %s", season_nfo, e)
+        
         for nfo_file in sorted(season_dir.glob("One Pace - S*E* - *.nfo")):
             if nfo_file.stem in skip_files:
                 continue
@@ -266,10 +310,10 @@ def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
                     "title": match.group(3),
                 })
 
-    return episodes
+    return episodes, seasons
 
 
-def _build_episode_mapping(media_location: Path) -> list[dict]:
+def _build_episode_mapping(media_location: Path) -> tuple[list[dict], list[dict]]:
     """
     Build a complete mapping of all One Pace episodes with metadata from NFO files
     and torrent information from Google Sheets.
@@ -284,16 +328,8 @@ def _build_episode_mapping(media_location: Path) -> list[dict]:
         media_location: Base path where media files are/will be stored
 
     Returns:
-        List of dictionaries, each containing:
-        - id: int - Sequential episode ID (1-indexed)
-        - ep_name: str - Episode name (NFO filename without extension)
-        - season: int - Season number
-        - ep_number: int - Episode number within season
-        - file_location_media: str - Absolute path to media file
-        - torrent_link: str | None - Nyaa torrent link
-        - crc32: str | None - CRC32 checksum of the MKV file
-        - torrent_link_extended: str | None - Extended version torrent link
-        - crc32_extended: str | None - Extended version CRC32 checksum
+        Tuple of (episodes, seasons) where episodes is a list of dicts and
+        seasons is a list of dicts with season info (num, title, image, description).
     """
 
     # Step 1: Load and parse arc overview
@@ -306,7 +342,7 @@ def _build_episode_mapping(media_location: Path) -> list[dict]:
     arc_episode_map = _load_arc_episodes(SHEETS_DIR, season_map)
 
     # Step 3: Parse NFO files
-    nfo_episodes = _parse_nfo_files(METADATA_CONTENT_DIR)
+    nfo_episodes, seasons = _parse_nfo_files(METADATA_CONTENT_DIR)
 
     # Step 4: Build mappings
     results = []
@@ -358,7 +394,7 @@ def _build_episode_mapping(media_location: Path) -> list[dict]:
             "crc32_extended": crc32_extended,
         })
 
-    return results
+    return results, seasons
 
 
 def _save_metadata_mapping(mapping: list[dict], media_location: Path):
@@ -370,9 +406,10 @@ def _save_metadata_mapping(mapping: list[dict], media_location: Path):
     logger.info("Saved constructed metadata mapping to %s", output_path)
 
 def refresh_and_build_mapping(media_location: Path, force_refresh: bool = False, save_mapping: bool = False):
-    """Refresh data and build metadata mapping."""
+    """Refresh data and build metadata mapping, populating the in-memory caches."""
+    global _episode_cache, _season_cache
     _refresh_data(media_location=media_location, force=force_refresh)
-    mapping = _build_episode_mapping(media_location)
+    _episode_cache, _season_cache = _build_episode_mapping(media_location)
     if save_mapping:
-        _save_metadata_mapping(mapping, media_location)
-    return mapping
+        _save_metadata_mapping(_episode_cache, media_location)
+    return _episode_cache
