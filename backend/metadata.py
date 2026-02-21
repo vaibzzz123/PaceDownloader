@@ -262,6 +262,15 @@ def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
     seasons = []
     filename_pattern = re.compile(r"One Pace - S(\d+)E(\d+) - (.+)")
 
+    # Load season descriptions
+    descriptions_path = Path(__file__).parent / "season_descriptions.json"
+    if descriptions_path.exists():
+        with open(descriptions_path) as f:
+            season_descriptions = json.load(f)
+    else:
+        logger.warning("Season descriptions file not found: %s", descriptions_path)
+        season_descriptions = {}
+
     # Sort season dirs numerically (Season 2 before Season 10)
     season_dirs = sorted(
         metadata_dir.glob("Season *"),
@@ -293,7 +302,7 @@ def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
                         "num": int(season_number),
                         "title": season_title.strip(),
                         "image": base64_image,
-                        "description": "",
+                        "description": season_descriptions.get(season_title.strip(), ""),
                     })
             except Exception as e:
                 logger.warning("Failed to parse season NFO %s: %s", season_nfo, e)
