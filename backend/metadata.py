@@ -6,8 +6,6 @@ import shutil
 import time
 from pathlib import Path
 import xml.etree.ElementTree as ET
-import base64
-
 from data_sources import (
     fetch_episode_metadata,
     fetch_onepace_sheet,
@@ -291,17 +289,11 @@ def _parse_nfo_files(metadata_dir: Path) -> list[dict]:
                 title_elem = root.find("title")
                 if title_elem is not None and title_elem.text:
                     season_number, season_title = title_elem.text.split(".")
-                    # base64 encode the image at season_dir / "poster.png"
-                    poster_path = season_dir / "poster.png"
-                    if poster_path.exists():
-                        with open(poster_path, "rb") as f:
-                            base64_image = base64.b64encode(f.read()).decode("utf-8")
-                    else:
-                        base64_image = ""
+                    season_num_str = season_dir.name  # e.g. "Season 1"
                     seasons.append({
                         "num": int(season_number),
                         "title": season_title.strip(),
-                        "image": base64_image,
+                        "image": f"/posters/{season_num_str}/poster.png",
                         "description": season_descriptions.get(season_title.strip(), ""),
                     })
             except Exception as e:

@@ -3,6 +3,7 @@ import signal
 import time
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from dotenv import load_dotenv
 
@@ -30,6 +31,7 @@ refresh_and_build_mapping(Path(settings["media_data_location"]["value"]), force_
 
 app = FastAPI()
 app.include_router(api_router)
+app.mount("/posters", StaticFiles(directory="data/eps-metadata/One Pace"), name="posters")
 
 if __name__ == "__main__":
     # media_data_location = Path(os.getenv("MEDIA_DATA_LOCATION", "data/media"))
