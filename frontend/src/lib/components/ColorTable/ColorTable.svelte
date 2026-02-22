@@ -88,6 +88,12 @@ function highlight(node: HTMLTableRowElement, shouldHighlight: boolean) {
   setTimeout(() => {
     node.classList.remove(...effectClasses);
   }, 1500);
+
+  // Remove transition classes after a delay so transition effects
+  // don't persist after highlight is removed
+  setTimeout(() => {
+    node.classList.remove(...transitionClasses);
+  }, 1750);
 }
 
 
