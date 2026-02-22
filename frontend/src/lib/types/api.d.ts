@@ -28,8 +28,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Seasons */
-        get: operations["get_seasons_season_get"];
+        /** Get Seasons Route */
+        get: operations["get_seasons_route_season_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -63,6 +63,17 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** SeasonResponse */
+        SeasonResponse: {
+            /** Num */
+            num: number;
+            /** Title */
+            title: string;
+            /** Description */
+            description: string;
+            /** Image */
+            image: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -102,7 +113,7 @@ export interface operations {
             };
         };
     };
-    get_seasons_season_get: {
+    get_seasons_route_season_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -117,7 +128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SeasonResponse"][];
                 };
             };
         };
@@ -139,7 +150,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SeasonResponse"];
                 };
             };
             /** @description Validation Error */

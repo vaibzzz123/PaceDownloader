@@ -8,11 +8,11 @@ router = APIRouter()
 async def root():
     return "test"
 
-@router.get("/season")
+@router.get("/season", response_model=list[SeasonResponse])
 def get_seasons_route():
     return [SeasonResponse(**s) for s in get_seasons()]
 
-@router.get("/season/{season_num}")
+@router.get("/season/{season_num}", response_model=SeasonResponse)
 def get_season(season_num: int):
     match = next((s for s in get_seasons() if s["num"] == season_num), None)
     if match is None:
