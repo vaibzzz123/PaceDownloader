@@ -1,19 +1,24 @@
-<script>
-  import * as Card from "../ui/card";
-
-  let { title, imagePath, seasonNum } = $props();
+<script lang="ts">
+  let { title, image, num, gridMode } = $props();
 </script>
 
-<Card.Root class="gap-0 py-0 overflow-hidden w-fit px-0">
-  <Card.Content class="p-0">
-    <a href={`/season/${seasonNum}`}>
-      <img src={imagePath} alt={title} class="h-auto rounded-t-xl max-h-100 spoiler:blur-md" />
-    </a>
-  </Card.Content>
-  <Card.Footer class="justify-center py-3 w-0 min-w-full">
-    <Card.Title class="text-2xl text-center text-wrap">
-      <span class="spoiler:hidden">{title}</span>
-      <span class="hidden spoiler:inline">Season {seasonNum}</span>
-    </Card.Title>
-  </Card.Footer>
-</Card.Root>
+<div
+  class="card preset-filled-primary-500 {gridMode
+    ? 'transition-transform hover:scale-105'
+    : ''}"
+>
+  <a
+    href={`/season/${num}`}
+    class="overflow-hidden block rounded-t-xl {gridMode ? '' : 'pointer-events-none'}"
+  >
+    <img
+      src={image}
+      alt={title}
+      class="h-auto {gridMode ? 'max-h-100' : 'max-h-100'} spoiler:blur-md spoiler:scale-110"
+    />
+  </a>
+  <div class="justify-center py-3 w-0 min-w-full h5 text-center text-wrap">
+    <span class="spoiler:hidden">{title}</span>
+    <span class="hidden spoiler:inline">Season {num}</span>
+  </div>
+</div>

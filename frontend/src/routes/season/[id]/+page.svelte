@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import SeasonInfo from '$lib/components/SeasonInfoSkeleton/SeasonInfoSkeleton.svelte';
+  import SeasonInfo from '$lib/components/SeasonInfo/SeasonInfo.svelte';
   import ColorTable from '$lib/components/ColorTable/ColorTable.svelte';
   import SpoilerText from '$lib/components/SpoilerText/SpoilerText.svelte';
   import DownloadIcon from "@lucide/svelte/icons/download";

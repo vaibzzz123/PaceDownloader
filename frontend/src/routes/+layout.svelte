@@ -1,7 +1,7 @@
 <script>
   import "../app.css";
   import { appState } from "$lib/state/index.svelte";
-  import LeftSideMenu from "$lib/components/LeftSideMenuSkeleton/LeftSideMenuSkeleton.svelte";
+  import LeftSideMenu from "$lib/components/LeftSideMenu/LeftSideMenu.svelte";
 
   let { children } = $props();
 

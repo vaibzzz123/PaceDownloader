@@ -1,5 +1,5 @@
 <script lang="ts">
-  import SeasonCard from "../SeasonCardSkeleton/SeasonCardSkeleton.svelte";
+  import SeasonCard from "../SeasonCard/SeasonCard.svelte";
   import SpoilerText from "../SpoilerText/SpoilerText.svelte";
 
   let { seasonNum, title, imagePath, description } = $props();
