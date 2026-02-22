@@ -2,12 +2,12 @@
   import SeasonCard from "../SeasonCard/SeasonCard.svelte";
   import SpoilerText from "../SpoilerText/SpoilerText.svelte";
 
-  let { seasonNum, title, imagePath, description } = $props();
+  let { num, title, image, description } = $props();
 </script>
 
 <div class="flex">
   <div class="shrink-0">
-    <SeasonCard {title} {imagePath} {seasonNum} gridMode={false}/>
+    <SeasonCard {title} {image} {num} gridMode={false}/>
   </div>
   <div class="ml-10 min-w-0 overflow-y-auto">
     <h1 class="text-3xl font-bold h1">Description:</h1>
