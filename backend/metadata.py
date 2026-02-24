@@ -159,12 +159,12 @@ def _parse_episode_number(ep_value: str) -> int:
     """
     ep_value = ep_value.strip()
 
-    # Try to match trailing digits (handles "01", "08", "00", etc.)
-    match = re.search(r'(\d+)$', ep_value)
+    # Match first digit sequence (handles "Arc 01", "Arc 25 (G8)", "Arc 59 Forward", etc.)
+    match = re.search(r'(\d+)', ep_value)
     if match:
         return int(match.group(1))
 
-    # Single-episode arc (no number suffix)
+    # Single-episode arc (no number at all)
     return 1
 
 
@@ -239,7 +239,9 @@ def _load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tu
                 continue
 
             ep_num = _parse_episode_number(ep_col_value)
-            arc_episode_map[(arc_info["arc_name"], ep_num)] = row
+            key = (arc_info["arc_name"], ep_num)
+            if key not in arc_episode_map:
+                arc_episode_map[key] = row
 
     return arc_episode_map
 
@@ -380,14 +382,23 @@ def _build_episode_mapping(media_location: Path) -> tuple[list[dict], list[dict]
                 torrent_link_extended = mkv_crc32_ext.get("link")
                 crc32_extended = mkv_crc32_ext.get("text")
 
+        # Extract and normalise duration from sheet row ("hh:mm:ss" → "mm:ss" when hh is "00")
+        duration = None
+        if sheet_row:
+            length_raw = sheet_row.get("Length")
+            if length_raw and isinstance(length_raw, str):
+                duration = length_raw[3:] if length_raw.startswith("00:") else length_raw
+
         # Build absolute file location path
         file_location = str(media_location.resolve() / f"Season {season_num}" / f"{nfo['filename']}.mkv")
 
         results.append({
             "id": episode_id,
             "ep_name": nfo["filename"],
+            "title": nfo["title"],
             "season": season_num,
             "ep_number": ep_num,
+            "duration": duration,
             "file_location_media": file_location,
             "torrent_link": torrent_link,
             "crc32": crc32,
