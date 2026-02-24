@@ -150,3 +150,6 @@ __pycache__/
 
 # pytest cov runtime file
 .coverage
+
+# VSCode workspace file
+*.code-workspace
