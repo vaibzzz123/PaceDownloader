@@ -13,13 +13,7 @@
 
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
-  const episodes = $derived([
-    { ep_id: 1, season: data.season.num, number: 1, title: 'Romance Dawn, the Dawn of an Adventure', duration: '24 min', status: 'Hardlinked' },
-    { ep_id: 2, season: data.season.num, number: 2, title: 'They Call Him Straw Hat Luffy', duration: '22 min', status: 'Copied' },
-    { ep_id: 3, season: data.season.num, number: 3, title: 'The Pirate King and the Master Swordsman', duration: '23 min', status: 'Downloading' },
-    { ep_id: 4, season: data.season.num, number: 4, title: 'The First', duration: '24 min', status: 'Error' },
-    { ep_id: 5, season: data.season.num, number: 5, title: 'Extra', duration: '22 min', status: 'Not Downloaded' },
-  ]);
+  const episodes = $derived(data.episodes);
 
   let isDownloadRunning = $state(false);
 </script>

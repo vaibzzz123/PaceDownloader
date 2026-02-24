@@ -55,10 +55,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/season/{season_num}/episodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Season Episodes */
+        get: operations["get_season_episodes_season__season_num__episodes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** EpisodeResponse */
+        EpisodeResponse: {
+            /** Ep Id */
+            ep_id: number;
+            /** Season */
+            season: number;
+            /** Number */
+            number: number;
+            /** Title */
+            title: string;
+            /** Duration */
+            duration: string | null;
+            /** Status */
+            status: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -151,6 +183,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SeasonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_season_episodes_season__season_num__episodes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                season_num: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeResponse"][];
                 };
             };
             /** @description Validation Error */
