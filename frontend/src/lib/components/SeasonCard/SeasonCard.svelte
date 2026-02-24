@@ -14,7 +14,7 @@
     <img
       src={image}
       alt={title}
-      class="h-auto {gridMode ? 'max-h-100' : 'max-h-100'}"
+      class="h-auto aspect-2/3 {gridMode ? 'max-h-100' : 'max-h-100'}"
     />
     <div class="hidden spoiler:block absolute inset-0 backdrop-blur-md"></div>
   </a>
