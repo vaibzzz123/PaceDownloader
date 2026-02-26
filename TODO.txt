@@ -1,5 +1,5 @@
 Main things left to implement for MVP:
-- API endpoints for episodes, episode downloads, and torrent downloads
+- API endpoints for episodes, episode downloads, and torrent downloads (done for episodes!)
 - Download all button/endpoint on season page
 - settings page and API endpoint for settings (halfway done, need to add endpoint and wire up)
 - initial setup wizard

@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException
+import asyncio
+import json
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from models import SeasonResponse, EpisodeResponse
 from metadata import get_seasons, get_episodes
 from db import get_episode_download_by_ep_id
-
 router = APIRouter()
 
 _STATUS_MAP = {
@@ -48,3 +50,26 @@ def get_season_episodes(season_num: int):
             status=status,
         ))
     return result
+
+async def event_generator(request: Request):
+    while True:
+        # Check if client disconnected
+        if await request.is_disconnected():
+            break
+
+        # Yield a named event
+        data = {"status": "downloading", "progress": 42}
+        yield f"event: download_update\ndata: {json.dumps(data)}\n\n"
+
+        await asyncio.sleep(2)  # wait before next update
+
+@router.get("/events")
+async def sse_endpoint(request: Request):
+    return StreamingResponse(
+        event_generator(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # disable nginx buffering
+        }
+    )
