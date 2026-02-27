@@ -66,18 +66,22 @@ def _fetch_google_sheet_xlsx(
     response = session.get(url, timeout=300, stream=True)
     response.raise_for_status()
     logger.debug("Google Sheets response status: %d", response.status_code)
+    
+    try:
+        # Download in chunks to handle large files better
+        chunks = []
+        for chunk in response.iter_content(chunk_size=8192):
+            chunks.append(chunk)
+        xlsx_bytes = b"".join(chunks)
 
-    # Download in chunks to handle large files better
-    chunks = []
-    for chunk in response.iter_content(chunk_size=8192):
-        chunks.append(chunk)
-    xlsx_bytes = b"".join(chunks)
-
-    # Optionally save a copy for debugging
-    if save_xlsx:
-        SHEETS_DIR.mkdir(parents=True, exist_ok=True)
-        with open(SHEETS_DIR / "onepace_sheets.xlsx", "wb") as f:
-            f.write(xlsx_bytes)
+        # Optionally save a copy for debugging
+        if save_xlsx:
+            SHEETS_DIR.mkdir(parents=True, exist_ok=True)
+            with open(SHEETS_DIR / "onepace_sheets.xlsx", "wb") as f:
+                f.write(xlsx_bytes)
+    except Exception as e:
+        logger.error("Failed to fetch Google Sheet: %s", e)
+        raise
 
     workbook = load_workbook(BytesIO(xlsx_bytes))
     all_sheets = {}

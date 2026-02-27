@@ -1,11 +1,14 @@
 import asyncio
 import json
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from models import SeasonResponse, EpisodeResponse
 from metadata import get_seasons, get_episodes
-from db import get_episode_download_by_ep_id
+from dependencies import get_download_manager
+from download_manager import DownloadManager
+from logging_config import get_logger
 router = APIRouter()
+logger = get_logger(__name__)
 
 _STATUS_MAP = {
     "pending":     "Pending",
@@ -32,15 +35,15 @@ def get_season(season_num: int):
     return SeasonResponse(**match)
 
 @router.get("/season/{season_num}/episodes", response_model=list[EpisodeResponse])
-def get_season_episodes(season_num: int):
+def get_season_episodes(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
     season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
 
     result = []
     for ep in season_episodes:
-        download = get_episode_download_by_ep_id(str(ep["id"]))
-        status = _STATUS_MAP.get(download["status"], download["status"]) if download else "Not Downloaded"
+        info = dm.get_episode_info(ep["id"])
+        status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
         result.append(EpisodeResponse(
             ep_id=ep["id"],
             season=ep["season"],
@@ -51,16 +54,20 @@ def get_season_episodes(season_num: int):
         ))
     return result
 
+progress = 0
+
 async def event_generator(request: Request):
+    global progress
     while True:
         # Check if client disconnected
         if await request.is_disconnected():
             break
 
         # Yield a named event
-        data = {"status": "downloading", "progress": 42}
+        data = {"status": "downloading", "progress": progress}
         yield f"event: download_update\ndata: {json.dumps(data)}\n\n"
 
+        progress += 1
         await asyncio.sleep(2)  # wait before next update
 
 @router.get("/events")

@@ -22,12 +22,18 @@ logger = get_logger(__name__)
 
 from qbittorrent import QbittorrentClient
 from download_manager import DownloadManager
+from dependencies import set_download_manager
 from api import router as api_router
 from metadata import refresh_and_build_mapping
 
 logger.info("Starting One Pace Jellyfin backend")
 
 refresh_and_build_mapping(Path(settings["media_data_location"]["value"]), force_refresh=False, save_mapping=True)
+
+qbt_client = QbittorrentClient()
+download_manager = DownloadManager(qbt_client)
+set_download_manager(download_manager)
+
 
 app = FastAPI()
 app.include_router(api_router)
