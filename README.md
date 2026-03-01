@@ -38,6 +38,9 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Create a .env file in the root directory of the backend (for development, see below):
+touch backend/.env
+
 # Run the development server
 fastapi dev main.py
 # Backend is now available at http://localhost:8000
@@ -51,6 +54,9 @@ cd frontend
 # Install dependencies
 npm install
 
+# Create a .env file in the root directory of the frontend (for development, see below):
+touch frontend/.env
+
 # Run the dev server
 npm run dev
 # Frontend is now available at http://localhost:5173
@@ -58,7 +64,7 @@ npm run dev
 
 ### 3. Configuration
 
-On first run, configure the app via environment variables or the settings UI (in progress):
+On first run, configure the app via environment variables or the settings UI (in progress). Place the environment variables in a `.env` file in the root directory of the backend:
 
 | Variable | Description | Default |
 |---|---|---|
@@ -74,6 +80,12 @@ On first run, configure the app via environment variables or the settings UI (in
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 
 Settings can also be stored in the SQLite database (`backend/backend.sqlite3`). Environment variables take precedence over database values.
+
+Also create a `.env` file in the root directory of the frontend (for development):
+
+```
+BACKEND_URL=http://localhost:8000
+```
 
 **Path mapping example** (qBittorrent in Docker):
 ```

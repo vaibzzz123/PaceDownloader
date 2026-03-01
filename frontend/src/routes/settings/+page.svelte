@@ -17,10 +17,6 @@
   });
 </script>
 
-{#snippet envBadge()}
-  <!-- <span class="chip bg-orange-500/15 dark:bg-orange-400/20 hover:bg-orange-500/25 dark:hover:bg-orange-400/30 text-orange-700 dark:text-orange-300 text-xs font-mono"></span> -->
-{/snippet}
-
 {#snippet envChip()}
 <span class="preset-tonal-warning mt-2 w-fit text-xs inline-flex items-center gap-2 rounded py-1 px-3 transition-all hover:brightness-90">
   <AlertTriangleIcon size={15}/><p>Set via environment variable — remove it to edit this setting.</p>
@@ -35,7 +31,6 @@
     <label class="label">
       <span class="label-text flex items-center gap-2">
         Media Data Location
-        {#if settings.media_data_location.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="input w-80"
@@ -48,7 +43,6 @@
     <label class="label w-fit">
       <span class="label-text flex items-center gap-2">
         Prefer Extended
-        {#if settings.prefer_extended.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="checkbox"
@@ -61,7 +55,6 @@
     <label class="label w-fit">
       <span class="label-text flex items-center gap-2">
         Log Level
-        {#if settings.log_level.is_env_var}{@render envBadge()}{/if}
       </span>
       <select class="select pl-3" bind:value={settings.log_level.value} disabled={settings.log_level.is_env_var}>
         <option value="DEBUG">DEBUG</option>
@@ -78,7 +71,6 @@
     <label class="label">
       <span class="label-text flex items-center gap-2">
         Hostname
-        {#if settings.qbt_hostname.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="input w-80"
@@ -91,7 +83,6 @@
     <label class="label">
       <span class="label-text flex items-center gap-2">
         Username
-        {#if settings.qbt_username.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="input w-80"
@@ -104,7 +95,6 @@
     <label class="label">
       <span class="label-text flex items-center gap-2">
         Password
-        {#if settings.qbt_password.is_env_var}{@render envBadge()}{/if}
       </span>
       <!-- Need autocomplete="new-password" to prevent password manager from trying to save the password -->
       <input
@@ -119,7 +109,6 @@
     <div class="flex flex-col">
       <span class="label-text flex items-center gap-2 mb-1">
         Path Mapping
-        {#if settings.qbt_path_here.is_env_var}{@render envBadge()}{/if}
       </span>
       <div class="flex items-center gap-2">
         <input
@@ -141,7 +130,6 @@
     <label class="label">
       <span class="label-text flex items-center gap-2">
         Category
-        {#if settings.qbt_category.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="input w-80"
@@ -154,7 +142,6 @@
     <label class="label">
       <span class="label-text flex items-center gap-2">
         Download Location
-        {#if settings.qbt_download_location.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="input w-80"
@@ -167,7 +154,6 @@
     <label class="label w-fit">
       <span class="label-text flex items-center gap-2">
         Polling Rate (s)
-        {#if settings.qbt_polling_rate.is_env_var}{@render envBadge()}{/if}
       </span>
       <input
         class="input w-24"
