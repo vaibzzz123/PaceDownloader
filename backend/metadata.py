@@ -5,7 +5,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from data_sources import (
     fetch_episode_metadata,
     fetch_onepace_sheet,
