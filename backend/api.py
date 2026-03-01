@@ -1,12 +1,13 @@
 import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from models import SeasonResponse, EpisodeResponse
 from metadata import get_seasons, get_episodes
 from dependencies import get_download_manager
 from download_manager import DownloadManager
 from logging_config import get_logger
+import db
 router = APIRouter()
 logger = get_logger(__name__)
 
@@ -19,9 +20,29 @@ _STATUS_MAP = {
     "error":       "Error",
 }
 
-@router.get("/")
-async def root():
-    return "test"
+@router.get("/health")
+async def health():
+    checks = {}
+    
+    # Check DB
+    try:
+        with db.get_db() as con:
+            con.execute("SELECT 1")
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+    
+    # Check qBittorrent (non-fatal if down)
+    try:
+        dm = get_download_manager()
+        dm.qbt_client._client.app_version()
+        checks["qbittorrent"] = "ok"
+    except Exception as e:
+        checks["qbittorrent"] = f"error: {e}"
+    
+    status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
+    code = 200 if status == "ok" else 503
+    return JSONResponse({"status": status, "checks": checks}, status_code=code)
 
 @router.get("/season", response_model=list[SeasonResponse])
 def get_seasons_route():
