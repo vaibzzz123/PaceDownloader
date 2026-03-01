@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-One Pace Jellyfin Web UI - A full-stack web app with a FastAPI backend and SvelteKit frontend that automates downloading One Pace episodes (fan-edited One Piece anime) via qBittorrent and places them in the correct media structure for Jellyfin media server.
+Pace-DL - A full-stack web app with a FastAPI backend and SvelteKit frontend that automates downloading One Pace episodes (fan-edited One Piece anime) via qBittorrent and places them in the correct media structure for Jellyfin media server.
 
 ## MCP Settings:
 
