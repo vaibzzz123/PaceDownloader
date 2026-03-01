@@ -333,6 +333,7 @@ def save_settings(
                 qbt_path_mapping = excluded.qbt_path_mapping,
                 qbt_category = excluded.qbt_category,
                 qbt_download_location = excluded.qbt_download_location,
+                qbt_polling_rate = excluded.qbt_polling_rate,
                 log_level = excluded.log_level
             """,
             (

@@ -20,7 +20,7 @@ One Pace releases episodes as torrents on Nyaa.si. This app provides a web UI to
 ## Prerequisites
 
 - **qBittorrent** with Web UI enabled (accessible from the machine running this app)
-- **Python 3.11+** for the backend
+- **Python 3.14+** for the backend
 - **Node.js 24+** for the frontend
 - A running **Jellyfin** instance with a configured media library
 
