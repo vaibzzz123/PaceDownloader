@@ -2,7 +2,6 @@
 
 import json
 import re
-from io import BytesIO
 from pathlib import Path
 
 import requests
@@ -62,84 +61,89 @@ def _fetch_google_sheet_xlsx(
     url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
     logger.debug("Fetching Google Sheet: %s", sheet_id)
 
+    SHEETS_DIR.mkdir(parents=True, exist_ok=True)
+    xlsx_path = SHEETS_DIR / "onepace_sheets.xlsx"
+
     session = _get_session_with_retries()
-    response = session.get(url, timeout=300, stream=True)
-    response.raise_for_status()
-    logger.debug("Google Sheets response status: %d", response.status_code)
-    
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = session.get(url, timeout=300, stream=True)
+            response.raise_for_status()
+            logger.debug("Google Sheets response status: %d", response.status_code)
+            with open(xlsx_path, "wb") as f:
+                for chunk in response.iter_content(chunk_size=65536):
+                    f.write(chunk)
+            break
+        except Exception as e:
+            xlsx_path.unlink(missing_ok=True)
+            if attempt < max_attempts:
+                logger.warning("Attempt %d/%d failed fetching Google Sheet: %s", attempt, max_attempts, e)
+            else:
+                logger.error("Failed to fetch Google Sheet after %d attempts: %s", max_attempts, e)
+                raise
+
     try:
-        # Download in chunks to handle large files better
-        chunks = []
-        for chunk in response.iter_content(chunk_size=8192):
-            chunks.append(chunk)
-        xlsx_bytes = b"".join(chunks)
+        workbook = load_workbook(xlsx_path)
+        all_sheets = {}
 
-        # Optionally save a copy for debugging
-        if save_xlsx:
-            SHEETS_DIR.mkdir(parents=True, exist_ok=True)
-            with open(SHEETS_DIR / "onepace_sheets.xlsx", "wb") as f:
-                f.write(xlsx_bytes)
-    except Exception as e:
-        logger.error("Failed to fetch Google Sheet: %s", e)
-        raise
+        for sheet_name in workbook.sheetnames:
+            sheet = workbook[sheet_name]
+            rows = list(sheet.iter_rows())
 
-    workbook = load_workbook(BytesIO(xlsx_bytes))
-    all_sheets = {}
+            if not rows:
+                all_sheets[sheet_name] = []
+                continue
 
-    for sheet_name in workbook.sheetnames:
-        sheet = workbook[sheet_name]
-        rows = list(sheet.iter_rows())
+            # Get headers from first row
+            headers = [cell.value for cell in rows[0]]
 
-        if not rows:
-            all_sheets[sheet_name] = []
-            continue
-
-        # Get headers from first row
-        headers = [cell.value for cell in rows[0]]
-
-        data = []
-        for row in rows[1:]:
-            row_dict = {}
-            has_data = False
-            for header, cell in zip(headers, row):
-                if header is None:
-                    continue
-                # Check if cell has a hyperlink object
-                if cell.hyperlink:
-                    row_dict[header] = {
-                        "text": cell.value,
-                        "link": cell.hyperlink.target,
-                    }
-                    has_data = True
-                # Check if cell value is a =HYPERLINK() formula string
-                elif isinstance(cell.value, str) and cell.value.startswith(
-                    "=HYPERLINK"
-                ):
-                    # Pattern to parse =HYPERLINK("url","text") or =HYPERLINK("url", "text") formulas
-                    HYPERLINK_PATTERN = re.compile(
-                        r'=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)'
-                    )
-                    match = HYPERLINK_PATTERN.match(cell.value)
-                    if match:
+            data = []
+            for row in rows[1:]:
+                row_dict = {}
+                has_data = False
+                for header, cell in zip(headers, row):
+                    if header is None:
+                        continue
+                    # Check if cell has a hyperlink object
+                    if cell.hyperlink:
                         row_dict[header] = {
-                            "text": match.group(2),
-                            "link": match.group(1),
+                            "text": cell.value,
+                            "link": cell.hyperlink.target,
                         }
                         has_data = True
+                    # Check if cell value is a =HYPERLINK() formula string
+                    elif isinstance(cell.value, str) and cell.value.startswith(
+                        "=HYPERLINK"
+                    ):
+                        # Pattern to parse =HYPERLINK("url","text") or =HYPERLINK("url", "text") formulas
+                        HYPERLINK_PATTERN = re.compile(
+                            r'=HYPERLINK\("([^"]+)",\s*"([^"]+)"\)'
+                        )
+                        match = HYPERLINK_PATTERN.match(cell.value)
+                        if match:
+                            row_dict[header] = {
+                                "text": match.group(2),
+                                "link": match.group(1),
+                            }
+                            has_data = True
+                        else:
+                            row_dict[header] = cell.value
+                            has_data = True
                     else:
                         row_dict[header] = cell.value
-                        has_data = True
-                else:
-                    row_dict[header] = cell.value
-                    if cell.value is not None:
-                        has_data = True
-            # Skip rows where all values are null
-            if has_data:
-                data.append(row_dict)
+                        if cell.value is not None:
+                            has_data = True
+                # Skip rows where all values are null
+                if has_data:
+                    data.append(row_dict)
 
-        all_sheets[sheet_name] = data
+            all_sheets[sheet_name] = data
 
-    return all_sheets
+        return all_sheets
+    finally:
+        if not save_xlsx:
+            xlsx_path.unlink(missing_ok=True)
 
 
 def fetch_onepace_sheet():
