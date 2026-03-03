@@ -6,6 +6,7 @@ from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
 from metadata import get_episodes
 from logging_config import get_logger
+from events import downloads_broadcaster
 import db
 
 logger = get_logger(__name__)
@@ -260,10 +261,13 @@ class DownloadManager:
             for t in torrent_downloads
         ]
 
-    def poll_downloads(self):
+    def poll_downloads(self) -> list[dict]:
+        """Poll qBittorrent for download progress and return a list of SSE events."""
+        events: list[dict] = []
+
         downloading = db.get_episode_downloads_by_status("downloading")
         if not downloading:
-            return
+            return events
 
         # Group by torrent to batch qBittorrent API calls
         by_torrent: dict[str, list[dict]] = {}
@@ -272,6 +276,15 @@ class DownloadManager:
 
         # Single call to get save_path for all torrents at once
         torrent_infos = self.qbt_client.get_torrents_info(list(by_torrent.keys()))
+
+        # Collect per-torrent progress events
+        for infohash, torrent_info in torrent_infos.items():
+            events.append({
+                "type": "download_progress",
+                "subject": "torrent",
+                "infohash": infohash,
+                "progress": round(torrent_info.progress * 100, 1),
+            })
 
         # One files call per unique torrent instead of one per episode
         for infohash, episodes in by_torrent.items():
@@ -291,6 +304,13 @@ class DownloadManager:
                 if not matching_file:
                     continue
 
+                events.append({
+                    "type": "download_progress",
+                    "subject": "episode",
+                    "ep_id": int(ep_id),
+                    "progress": round(matching_file.progress * 100, 1),
+                })
+
                 try:
                     if not ep["file_path_torrent"]:
                         torrent_info = torrent_infos.get(infohash)
@@ -302,9 +322,16 @@ class DownloadManager:
 
                     if matching_file.progress >= 1.0:
                         logger.info("Episode %s download complete, placing file", ep_id)
-                        self._add_episode_to_data_location(int(ep_id))
+                        final_status = self._add_episode_to_data_location(int(ep_id))
+                        events.append({
+                            "type": "episode_status_changed",
+                            "ep_id": int(ep_id),
+                            "status": final_status,
+                        })
                 except Exception as e:
                     logger.error("Error processing episode %s: %s", ep_id, e)
+
+        return events
 
     async def start_polling(self):
         settings = db.get_settings()
@@ -315,12 +342,15 @@ class DownloadManager:
     async def _poll_loop(self, interval: int):
         while True:
             try:
-                await asyncio.to_thread(self.poll_downloads)
+                events = await asyncio.to_thread(self.poll_downloads)
+                for event in events:
+                    downloads_broadcaster.publish(event)
             except Exception as e:
                 logger.error("Error during poll cycle: %s", e)
             await asyncio.sleep(interval)
 
-    def _add_episode_to_data_location(self, episode_id: int):
+    def _add_episode_to_data_location(self, episode_id: int) -> str:
+        """Place the downloaded file at the media location. Returns the final status string."""
         episode_download = db.get_episode_download_by_ep_id(episode_id)
         if not episode_download:
             raise ValueError(f"No download found for episode ID {episode_id}")
@@ -335,18 +365,22 @@ class DownloadManager:
         try:
             os.link(src, dest)
             logger.info("Hardlinked episode %d: %s -> %s", episode_id, src, dest)
-            db.update_episode_download_status(episode_download["id"], "hardlink")
+            status = "hardlink"
         except OSError as e:
             logger.warning("Hardlink failed for episode %d (%s), falling back to copy", episode_id, e)
             shutil.copy2(src, dest)
             logger.info("Copied episode %d: %s -> %s", episode_id, src, dest)
-            db.update_episode_download_status(episode_download["id"], "copy")
+            status = "copy"
+
+        db.update_episode_download_status(episode_download["id"], status)
 
         infohash = episode_download["torrent_infohash"]
         remaining = db.get_episode_downloads_by_torrent(infohash)
         if all(ep["status"] in ("hardlink", "copy") for ep in remaining):
             db.update_torrent_download_status(infohash, "completed")
             logger.info("All episodes for torrent %s completed", infohash)
+
+        return status
 
     def _translate_file_path(self, file_path: str) -> str:
         settings = db.get_settings()
