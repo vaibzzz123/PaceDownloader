@@ -36,6 +36,7 @@ class QbittorrentClient:
                 host=self._hostname,
                 username=self._username,
                 password=self._password,
+                REQUESTS_ARGS={"timeout": 10},
             )
             try:
                 self._client.auth_log_in()
@@ -123,6 +124,23 @@ class QbittorrentClient:
             logger.error(
                 "Failed to retrieve torrent info for hash %s: %s", info_hash, e
             )
+            raise
+
+    def get_torrents_info(self, info_hashes: list[str]) -> dict:
+        """Retrieve torrent info for multiple hashes in a single API call. Returns dict keyed by hash."""
+        try:
+            torrents = self._client.torrents_info(torrent_hashes=info_hashes)
+            return {t.hash: t for t in torrents}
+        except Exception as e:
+            logger.error("Failed to retrieve torrent info for hashes %s: %s", info_hashes, e)
+            raise
+
+    def get_torrent_files(self, info_hash: str) -> list:
+        """Get all files for a torrent."""
+        try:
+            return self._client.torrents_files(torrent_hash=info_hash)
+        except Exception as e:
+            logger.error("Failed to get files for torrent %s: %s", info_hash, e)
             raise
 
     def start_torrent(self, info_hash: str):

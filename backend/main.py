@@ -1,6 +1,4 @@
-import os
-import signal
-import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -36,7 +34,13 @@ download_manager = DownloadManager(qbt_client)
 set_download_manager(download_manager)
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await download_manager.start_polling()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,18 +49,3 @@ app.add_middleware(
 )
 app.include_router(api_router)
 app.mount("/posters", StaticFiles(directory="data/eps-metadata/One Pace"), name="posters")
-
-if __name__ == "__main__":    
-    def shutdown(signum, frame):
-        logger.info("Received signal %s, shutting down", signum)
-        download_manager.stop_polling()
-
-    signal.signal(signal.SIGINT, shutdown)
-    signal.signal(signal.SIGTERM, shutdown)
-
-    try:
-        signal.pause()
-    except AttributeError:
-        # signal.pause() not available on Windows
-        while download_manager._polling:
-            time.sleep(1)
