@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from models import SeasonResponse, EpisodeResponse
 from metadata import get_seasons, get_episodes
@@ -74,6 +74,101 @@ def get_season_episodes(season_num: int, dm: DownloadManager = Depends(get_downl
             status=status,
         ))
     return result
+
+@router.post("/episode/{episode_id}/download", response_model=EpisodeResponse)
+def download_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
+    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    if ep is None:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+
+    info = dm.get_episode_info(episode_id)
+    if info and info["status"] in ("downloading", "pending"):
+        raise HTTPException(status_code=409, detail=f"Episode {episode_id} is already downloading")
+
+    try:
+        settings = db.get_settings()
+        prefer_extended = settings["prefer_extended"]["value"] if settings else True
+        dm.download_episode(episode_id, prefer_extended=prefer_extended)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    info = dm.get_episode_info(episode_id)
+    status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
+    return EpisodeResponse(ep_id=ep["id"], season=ep["season"], number=ep["ep_number"], title=ep["title"], duration=ep["duration"], status=status)
+
+
+@router.post("/episode/{episode_id}/pause", response_model=EpisodeResponse)
+def pause_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
+    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    if ep is None:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+
+    try:
+        dm.pause_episode(episode_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    info = dm.get_episode_info(episode_id)
+    status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
+    return EpisodeResponse(ep_id=ep["id"], season=ep["season"], number=ep["ep_number"], title=ep["title"], duration=ep["duration"], status=status)
+
+
+@router.post("/episode/{episode_id}/resume", response_model=EpisodeResponse)
+def resume_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
+    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    if ep is None:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+
+    try:
+        dm.resume_episode(episode_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    info = dm.get_episode_info(episode_id)
+    status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
+    return EpisodeResponse(ep_id=ep["id"], season=ep["season"], number=ep["ep_number"], title=ep["title"], duration=ep["duration"], status=status)
+
+
+@router.delete("/episode/{episode_id}", status_code=204)
+def remove_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
+    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    if ep is None:
+        raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
+
+    try:
+        dm.remove_episode(episode_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    return Response(status_code=204)
+
+
+@router.post("/torrent/{infohash}/pause", status_code=204)
+def pause_torrent_route(infohash: str, dm: DownloadManager = Depends(get_download_manager)):
+    try:
+        dm.pause_torrent(infohash)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return Response(status_code=204)
+
+
+@router.post("/torrent/{infohash}/resume", status_code=204)
+def resume_torrent_route(infohash: str, dm: DownloadManager = Depends(get_download_manager)):
+    try:
+        dm.resume_torrent(infohash)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return Response(status_code=204)
+
+
+@router.delete("/torrent/{infohash}", status_code=204)
+def remove_torrent_route(infohash: str, dm: DownloadManager = Depends(get_download_manager)):
+    try:
+        dm.remove_torrent(infohash)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return Response(status_code=204)
+
 
 progress = 0
 

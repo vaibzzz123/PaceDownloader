@@ -134,6 +134,35 @@ class DownloadManager:
 
         logger.info("Removed episode download for episode ID %d", episode_id)
 
+    def pause_torrent(self, infohash: str):
+        torrent = db.get_torrent_download(infohash)
+        if not torrent:
+            raise ValueError(f"No torrent found with infohash {infohash}")
+        self.qbt_client.pause_torrent(infohash)
+        for ep in db.get_episode_downloads_by_torrent(infohash):
+            if ep["status"] == "downloading":
+                db.update_episode_download_status(ep["id"], "paused")
+        logger.info("Paused torrent %s", infohash)
+
+    def resume_torrent(self, infohash: str):
+        torrent = db.get_torrent_download(infohash)
+        if not torrent:
+            raise ValueError(f"No torrent found with infohash {infohash}")
+        self.qbt_client.start_torrent(infohash)
+        for ep in db.get_episode_downloads_by_torrent(infohash):
+            if ep["status"] == "paused":
+                db.update_episode_download_status(ep["id"], "downloading")
+        logger.info("Resumed torrent %s", infohash)
+
+    def remove_torrent(self, infohash: str):
+        torrent = db.get_torrent_download(infohash)
+        if not torrent:
+            raise ValueError(f"No torrent found with infohash {infohash}")
+        self.qbt_client.stop_torrent(infohash)
+        db.delete_episode_downloads_by_torrent(infohash)
+        db.delete_torrent_download(infohash)
+        logger.info("Removed torrent %s", infohash)
+
     def get_episode_info(self, episode_id: int) -> dict | None:
         episode_download = db.get_episode_download_by_ep_id(episode_id)
         if not episode_download:
