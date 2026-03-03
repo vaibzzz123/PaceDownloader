@@ -196,6 +196,70 @@ class DownloadManager:
     def list_torrent_downloads(self) -> list[dict]:
         return db.get_all_torrent_downloads()
 
+    def list_episode_downloads_with_progress(self) -> list[dict]:
+        """Return all episode downloads enriched with per-episode qBittorrent progress and torrent name."""
+        episode_downloads = db.get_all_episode_downloads()
+        if not episode_downloads:
+            return []
+
+        by_infohash: dict[str, list[dict]] = {}
+        for dl in episode_downloads:
+            by_infohash.setdefault(dl["torrent_infohash"], []).append(dl)
+
+        progress_map: dict[int, float] = {}
+        torrent_name_map: dict[str, str] = {}
+        for infohash, eps in by_infohash.items():
+            torrent_record = db.get_torrent_download(infohash)
+            torrent_name_map[infohash] = torrent_record["name"] if torrent_record and torrent_record["name"] else infohash
+            try:
+                files = self.qbt_client.get_torrent_files(infohash)
+                for ep in eps:
+                    ep_id = int(ep["ep_id"])
+                    if ep["status"] in ("hardlink", "copy"):
+                        progress_map[ep_id] = 100.0
+                    else:
+                        matching = next((f for f in files if ep["crc32"].lower() in f.name.lower()), None)
+                        progress_map[ep_id] = round(matching.progress * 100, 1) if matching else 0.0
+            except Exception as e:
+                logger.warning("Could not fetch files for torrent %s: %s", infohash, e)
+                for ep in eps:
+                    ep_id = int(ep["ep_id"])
+                    progress_map[ep_id] = 100.0 if ep["status"] in ("hardlink", "copy") else 0.0
+
+        return [
+            {
+                **dl,
+                "ep_id": int(dl["ep_id"]),
+                "progress": progress_map.get(int(dl["ep_id"]), 0.0),
+                "torrent_name": torrent_name_map.get(dl["torrent_infohash"], dl["torrent_infohash"]),
+            }
+            for dl in episode_downloads
+        ]
+
+    def list_torrent_downloads_with_progress(self) -> list[dict]:
+        """Return all torrent downloads with progress from qBittorrent."""
+        torrent_downloads = db.get_all_torrent_downloads()
+        if not torrent_downloads:
+            return []
+
+        infohashes = [t["infohash"] for t in torrent_downloads]
+        try:
+            torrent_infos = self.qbt_client.get_torrents_info(infohashes)
+        except Exception as e:
+            logger.warning("Could not fetch torrent info from qBittorrent: %s", e)
+            torrent_infos = {}
+
+        return [
+            {
+                "infohash": t["infohash"],
+                "name": t["name"] if t["name"] else t["infohash"],
+                "status": t["status"],
+                "progress": round(torrent_infos[t["infohash"]].progress * 100, 1) if t["infohash"] in torrent_infos else 0.0,
+                "ep_ids": [int(ep["ep_id"]) for ep in db.get_episode_downloads_by_torrent(t["infohash"])],
+            }
+            for t in torrent_downloads
+        ]
+
     def poll_downloads(self):
         downloading = db.get_episode_downloads_by_status("downloading")
         if not downloading:

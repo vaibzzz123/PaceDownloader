@@ -15,3 +15,22 @@ class EpisodeResponse(BaseModel):
     title: str
     duration: str | None
     status: str
+
+
+class EpisodeDownloadResponse(BaseModel):
+    ep_id: int
+    season: int
+    title: str
+    extended: bool
+    status: str
+    progress: float
+    torrent_infohash: str
+    torrent_name: str
+
+
+class TorrentDownloadResponse(BaseModel):
+    infohash: str
+    name: str
+    status: str
+    progress: float
+    ep_ids: list[int]

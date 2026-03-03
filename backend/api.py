@@ -2,7 +2,7 @@ import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from models import SeasonResponse, EpisodeResponse
+from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse
 from metadata import get_seasons, get_episodes
 from dependencies import get_download_manager
 from download_manager import DownloadManager
