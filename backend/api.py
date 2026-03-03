@@ -257,6 +257,8 @@ async def downloads_sse(request: Request):
                     break
                 try:
                     event = await asyncio.wait_for(q.get(), timeout=15)
+                    if event is None:  # shutdown sentinel from broadcaster.close()
+                        break
                     yield f"data: {json.dumps(event)}\n\n"
                 except asyncio.TimeoutError:
                     yield ": keepalive\n\n"

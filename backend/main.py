@@ -24,6 +24,7 @@ from download_manager import DownloadManager
 from dependencies import set_download_manager
 from api import router as api_router
 from metadata import refresh_and_build_mapping
+from events import downloads_broadcaster, metadata_broadcaster
 
 logger.info("Starting One Pace Jellyfin backend")
 
@@ -38,6 +39,8 @@ set_download_manager(download_manager)
 async def lifespan(app: FastAPI):
     await download_manager.start_polling()
     yield
+    downloads_broadcaster.close()
+    metadata_broadcaster.close()
 
 
 app = FastAPI(lifespan=lifespan)

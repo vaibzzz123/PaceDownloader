@@ -29,3 +29,10 @@ class Broadcaster:
     def publish(self, event: dict):
         for q in self._subscribers:
             q.put_nowait(event)
+
+    def close(self):
+        """Signal all subscribers to stop. Call during application shutdown."""
+        for q in self._subscribers:
+            q.put_nowait(None)
+        self._subscribers.clear()
+        logger.debug("Broadcaster closed, all subscribers notified")
