@@ -48,7 +48,8 @@ class SettingsResponse(BaseModel):
     qbt_hostname: SettingField
     qbt_username: SettingField
     qbt_password: SettingField
-    qbt_path_mapping: SettingField
+    qbt_path_local: SettingField
+    qbt_path_remote: SettingField
     qbt_category: SettingField
     qbt_download_location: SettingField
     qbt_polling_rate: SettingField
@@ -61,8 +62,9 @@ class SettingsSaveRequest(BaseModel):
     qbt_hostname: str
     qbt_username: str
     qbt_password: str
-    qbt_path_mapping: str | None = None
+    qbt_path_local: str | None = None
+    qbt_path_remote: str | None = None
     qbt_category: str | None = None
     qbt_download_location: str | None = None
-    qbt_polling_rate: int = 10
+    qbt_polling_rate: int = 8
     log_level: str = "INFO"

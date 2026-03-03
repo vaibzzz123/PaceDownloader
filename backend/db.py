@@ -14,7 +14,8 @@ SETTINGS_FIELDS = [
     "qbt_hostname",
     "qbt_username",
     "qbt_password",
-    "qbt_path_mapping",
+    "qbt_path_local",
+    "qbt_path_remote",
     "qbt_category",
     "qbt_download_location",
     "qbt_polling_rate",
@@ -60,12 +61,33 @@ def initialize_settings_table():
             )
         """)
 
-        try:
-            con.execute("ALTER TABLE settings ADD COLUMN qbt_polling_rate INTEGER NOT NULL DEFAULT 10")
-            logger.debug("Added qbt_polling_rate column to settings table")
-        except sqlite3.OperationalError:
-            # Column already exists
-            pass
+        for col, definition in [
+            ("qbt_polling_rate", "INTEGER NOT NULL DEFAULT 10"),
+            ("qbt_path_local", "TEXT"),
+            ("qbt_path_remote", "TEXT"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE settings ADD COLUMN {col} {definition}")
+                logger.debug("Added %s column to settings table", col)
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
+        # Migrate existing qbt_path_mapping data into the two new columns
+        con.execute("""
+            UPDATE settings
+            SET
+                qbt_path_local = CASE
+                    WHEN instr(qbt_path_mapping, ':') > 0
+                    THEN substr(qbt_path_mapping, 1, instr(qbt_path_mapping, ':') - 1)
+                    ELSE qbt_path_mapping
+                END,
+                qbt_path_remote = CASE
+                    WHEN instr(qbt_path_mapping, ':') > 0
+                    THEN substr(qbt_path_mapping, instr(qbt_path_mapping, ':') + 1)
+                    ELSE ''
+                END
+            WHERE qbt_path_local IS NULL AND qbt_path_mapping IS NOT NULL
+        """)
 
         con.execute("""
             INSERT OR IGNORE INTO settings (singleton) VALUES (1)
@@ -329,10 +351,11 @@ def save_settings(
     qbt_username: str,
     qbt_password: str,
     prefer_extended: bool = True,
-    qbt_path_mapping: str | None = None,
+    qbt_path_local: str | None = None,
+    qbt_path_remote: str | None = None,
     qbt_category: str | None = None,
     qbt_download_location: str | None = None,
-    qbt_polling_rate: int = 10,
+    qbt_polling_rate: int = 8,
     log_level: str = "INFO",
 ):
     with get_db() as con:
@@ -340,16 +363,17 @@ def save_settings(
             """
             INSERT INTO settings (
                 singleton, media_data_location, prefer_extended, qbt_hostname,
-                qbt_username, qbt_password, qbt_path_mapping, qbt_category,
-                qbt_download_location, qbt_polling_rate, log_level
-            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                qbt_username, qbt_password, qbt_path_local, qbt_path_remote,
+                qbt_category, qbt_download_location, qbt_polling_rate, log_level
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(singleton) DO UPDATE SET
                 media_data_location = excluded.media_data_location,
                 prefer_extended = excluded.prefer_extended,
                 qbt_hostname = excluded.qbt_hostname,
                 qbt_username = excluded.qbt_username,
                 qbt_password = excluded.qbt_password,
-                qbt_path_mapping = excluded.qbt_path_mapping,
+                qbt_path_local = excluded.qbt_path_local,
+                qbt_path_remote = excluded.qbt_path_remote,
                 qbt_category = excluded.qbt_category,
                 qbt_download_location = excluded.qbt_download_location,
                 qbt_polling_rate = excluded.qbt_polling_rate,
@@ -361,7 +385,8 @@ def save_settings(
                 qbt_hostname,
                 qbt_username,
                 qbt_password,
-                qbt_path_mapping,
+                qbt_path_local,
+                qbt_path_remote,
                 qbt_category,
                 qbt_download_location,
                 qbt_polling_rate,

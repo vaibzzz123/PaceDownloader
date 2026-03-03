@@ -350,17 +350,14 @@ class DownloadManager:
 
     def _translate_file_path(self, file_path: str) -> str:
         settings = db.get_settings()
-        if not settings or not settings["qbt_path_mapping"]["value"]:
+        if not settings:
             return file_path
 
-        mapping = settings["qbt_path_mapping"]["value"]
-        # Format: "local_path:remote_path" e.g. "/home/user/downloads/:/downloads/"
-        parts = mapping.split(":")
-        if len(parts) != 2:
-            logger.warning("Invalid qbt_path_mapping format: %s", mapping)
+        local_path = settings["qbt_path_local"]["value"] or ""
+        remote_path = settings["qbt_path_remote"]["value"] or ""
+        if not local_path or not remote_path:
             return file_path
 
-        local_path, remote_path = parts
         if file_path.startswith(remote_path):
             translated = file_path.replace(remote_path, local_path, 1)
             logger.debug("Translated path: %s -> %s", file_path, translated)

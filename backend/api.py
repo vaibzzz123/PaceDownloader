@@ -213,13 +213,16 @@ def get_settings_route():
 
 @router.put("/settings", response_model=SettingsResponse)
 def save_settings_route(req: SettingsSaveRequest):
+    if req.qbt_polling_rate < 5:
+        raise HTTPException(status_code=422, detail="Polling rate must be at least 5 seconds")
     db.save_settings(
         media_data_location=req.media_data_location,
         qbt_hostname=req.qbt_hostname,
         qbt_username=req.qbt_username,
         qbt_password=req.qbt_password,
         prefer_extended=req.prefer_extended,
-        qbt_path_mapping=req.qbt_path_mapping,
+        qbt_path_local=req.qbt_path_local,
+        qbt_path_remote=req.qbt_path_remote,
         qbt_category=req.qbt_category,
         qbt_download_location=req.qbt_download_location,
         qbt_polling_rate=req.qbt_polling_rate,

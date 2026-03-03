@@ -8,7 +8,8 @@ def test_qbittorrent_client_initialization(mock_get_settings):
         "qbt_hostname": {"value": "http://localhost:8080"},
         "qbt_username": {"value": "admin"},
         "qbt_password": {"value": "adminadmin"},
-        "qbt_path_mapping": {"value": ""},
+        "qbt_path_local": {"value": ""},
+        "qbt_path_remote": {"value": ""},
         "qbt_category": {"value": ""},
         "qbt_download_location": {"value": ""},
     }

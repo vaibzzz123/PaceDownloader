@@ -20,7 +20,6 @@ class QbittorrentClient:
         self._hostname = settings["qbt_hostname"]["value"]
         self._username = settings["qbt_username"]["value"]
         self._password = settings["qbt_password"]["value"]
-        self._path_mapping = settings["qbt_path_mapping"]["value"] or ""
         self._category = settings["qbt_category"]["value"] or ""
         self._download_location = settings["qbt_download_location"]["value"] or ""
         self._client: qbittorrentapi.Client | None = None
