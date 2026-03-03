@@ -4,7 +4,7 @@ Main things left to implement for MVP:
 - API endpoints and frontend wiring for torrent downloads (done!)
 - SSE endpoint for download events
 - Download all button/endpoint on season page, maybe pause all/resume all and delete all
-- settings page and API endpoint for settings (halfway done, need to add endpoint and frontend wiring)
+- settings page and API endpoint for settings (done!)
 - If episode files are already downloaded in the right location, create a download record for them
 - initial setup wizard
 - Changes in file names and updated episodes (ex redone eps by One Pace team, their crc32 might change, need to think about how to approach this)

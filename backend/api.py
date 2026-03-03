@@ -176,11 +176,14 @@ async def remove_episode_route(episode_id: int, dm: DownloadManager = Depends(ge
         raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
 
     try:
-        await asyncio.to_thread(dm.remove_episode, episode_id)
+        torrent_change = await asyncio.to_thread(dm.remove_episode, episode_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
     downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": episode_id, "status": "removed"})
+    if torrent_change:
+        infohash, new_status = torrent_change
+        downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": new_status})
     return Response(status_code=204)
 
 

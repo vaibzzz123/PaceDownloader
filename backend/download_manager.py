@@ -108,7 +108,13 @@ class DownloadManager:
         db.update_torrent_download_status(infohash, "downloading")
         logger.info("Resumed download for episode ID %d", episode_id)
 
-    def remove_episode(self, episode_id: int):
+    def remove_episode(self, episode_id: int) -> tuple[str, str] | None:
+        """Remove an episode download.
+
+        Returns (infohash, new_torrent_status) if the torrent's status changed as a
+        side-effect of the removal, so the caller can broadcast the change.
+        Returns None if the torrent was deleted entirely or its status was unaffected.
+        """
         episode_download = db.get_episode_download_by_ep_id(episode_id)
         if not episode_download:
             raise ValueError(f"No download found for episode ID {episode_id}")
@@ -130,14 +136,20 @@ class DownloadManager:
         # Remove the episode download DB record
         db.delete_episode_download(episode_download["id"])
 
-        # If no other episodes use this torrent, remove it entirely from qBittorrent
+        # Update the torrent's status based on what's left
         remaining = db.get_episode_downloads_by_torrent(infohash)
         if not remaining:
             self.qbt_client.stop_torrent(infohash)
             db.delete_torrent_download(infohash)
             logger.info("Removed torrent %s from qBittorrent (no remaining episodes)", infohash)
+            return None
+        elif all(ep["status"] in ("hardlink", "copy") for ep in remaining):
+            db.update_torrent_download_status(infohash, "completed")
+            logger.info("Torrent %s marked completed after episode %d removed", infohash, episode_id)
+            return (infohash, "completed")
 
         logger.info("Removed episode download for episode ID %d", episode_id)
+        return None
 
     def pause_torrent(self, infohash: str):
         torrent = db.get_torrent_download(infohash)
