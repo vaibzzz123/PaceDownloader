@@ -17,6 +17,7 @@ _STATUS_MAP = {
     "paused":      "Paused",
     "hardlink":    "Hardlinked",
     "copy":        "Copied",
+    "completed":   "Completed",
     "error":       "Error",
 }
 
@@ -74,6 +75,38 @@ def get_season_episodes(season_num: int, dm: DownloadManager = Depends(get_downl
             status=status,
         ))
     return result
+
+@router.get("/episode", response_model=list[EpisodeDownloadResponse])
+def list_episode_downloads_route(dm: DownloadManager = Depends(get_download_manager)):
+    metadata_map = {ep["id"]: ep for ep in get_episodes()}
+    return [
+        EpisodeDownloadResponse(
+            ep_id=dl["ep_id"],
+            season=metadata_map.get(dl["ep_id"], {}).get("season", 0),
+            title=metadata_map.get(dl["ep_id"], {}).get("title", f"Episode {dl['ep_id']}"),
+            extended=bool(dl["prefer_extended"]),
+            status=_STATUS_MAP.get(dl["status"], dl["status"]),
+            progress=dl["progress"],
+            torrent_infohash=dl["torrent_infohash"],
+            torrent_name=dl["torrent_name"],
+        )
+        for dl in dm.list_episode_downloads_with_progress()
+    ]
+
+
+@router.get("/torrent", response_model=list[TorrentDownloadResponse])
+def list_torrent_downloads_route(dm: DownloadManager = Depends(get_download_manager)):
+    return [
+        TorrentDownloadResponse(
+            infohash=dl["infohash"],
+            name=dl["name"],
+            status=_STATUS_MAP.get(dl["status"], dl["status"]),
+            progress=dl["progress"],
+            ep_ids=dl["ep_ids"],
+        )
+        for dl in dm.list_torrent_downloads_with_progress()
+    ]
+
 
 @router.post("/episode/{episode_id}/download", response_model=EpisodeResponse)
 def download_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
