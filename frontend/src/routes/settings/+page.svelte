@@ -5,20 +5,34 @@
 
   let { data }: PageProps = $props();
 
-  const [initPathHere = '', initPathQbt = ''] = ((data.settings.qbt_path_mapping.value as string) ?? '').split(':');
-
   let form = $state({
     media_data_location: (data.settings.media_data_location.value as string) ?? '',
     prefer_extended: Boolean(data.settings.prefer_extended.value),
     qbt_hostname: (data.settings.qbt_hostname.value as string) ?? '',
     qbt_username: (data.settings.qbt_username.value as string) ?? '',
     qbt_password: (data.settings.qbt_password.value as string) ?? '',
-    qbt_path_here: initPathHere,
-    qbt_path_qbt: initPathQbt,
+    qbt_path_local: (data.settings.qbt_path_local.value as string) ?? '',
+    qbt_path_remote: (data.settings.qbt_path_remote.value as string) ?? '',
     qbt_category: (data.settings.qbt_category.value as string) ?? '',
     qbt_download_location: (data.settings.qbt_download_location.value as string) ?? '',
-    qbt_polling_rate: (data.settings.qbt_polling_rate.value as number) ?? 10,
+    qbt_polling_rate: (data.settings.qbt_polling_rate.value as number) ?? 8,
     log_level: (data.settings.log_level.value as string) ?? 'INFO',
+  });
+
+  // Need to do things this way so that the form is updated when the page is reloaded
+  // TODO: Find a better way to do all of this, feels way too hacky for something relatively simple
+  $effect(() => {
+    form.media_data_location = (data.settings.media_data_location.value as string) ?? '';
+    form.prefer_extended = Boolean(data.settings.prefer_extended.value);
+    form.qbt_hostname = (data.settings.qbt_hostname.value as string) ?? '';
+    form.qbt_username = (data.settings.qbt_username.value as string) ?? '';
+    form.qbt_password = (data.settings.qbt_password.value as string) ?? '';
+    form.qbt_path_local = (data.settings.qbt_path_local.value as string) ?? '';
+    form.qbt_path_remote = (data.settings.qbt_path_remote.value as string) ?? '';
+    form.qbt_category = (data.settings.qbt_category.value as string) ?? '';
+    form.qbt_download_location = (data.settings.qbt_download_location.value as string) ?? '';
+    form.qbt_polling_rate = (data.settings.qbt_polling_rate.value as number) ?? 8;
+    form.log_level = (data.settings.log_level.value as string) ?? 'INFO';
   });
 
   let saveError = $state<string | null>(null);
@@ -29,9 +43,6 @@
     saving = true;
     saveError = null;
     saved = false;
-    const pathMapping = form.qbt_path_here || form.qbt_path_qbt
-      ? `${form.qbt_path_here}:${form.qbt_path_qbt}`
-      : null;
     try {
       const res = await fetch(`${PUBLIC_BACKEND_URL}/settings`, {
         method: 'PUT',
@@ -42,7 +53,8 @@
           qbt_hostname: form.qbt_hostname,
           qbt_username: form.qbt_username,
           qbt_password: form.qbt_password,
-          qbt_path_mapping: pathMapping,
+          qbt_path_local: form.qbt_path_local || null,
+          qbt_path_remote: form.qbt_path_remote || null,
           qbt_category: form.qbt_category || null,
           qbt_download_location: form.qbt_download_location || null,
           qbt_polling_rate: form.qbt_polling_rate,
@@ -168,18 +180,18 @@
         <input
           class="input w-96"
           type="text"
-          bind:value={form.qbt_path_here}
-          disabled={data.settings.qbt_path_mapping.env_override}
+          bind:value={form.qbt_path_local}
+          disabled={data.settings.qbt_path_local.env_override}
         />
-        <span class="font-bold">:</span>
+        <span class="font-bold">→</span>
         <input
           class="input w-96"
           type="text"
-          bind:value={form.qbt_path_qbt}
-          disabled={data.settings.qbt_path_mapping.env_override}
+          bind:value={form.qbt_path_remote}
+          disabled={data.settings.qbt_path_remote.env_override}
         />
       </div>
-      {#if data.settings.qbt_path_mapping.env_override}{@render envChip()}{/if}
+      {#if data.settings.qbt_path_local.env_override || data.settings.qbt_path_remote.env_override}{@render envChip()}{/if}
     </div>
     <label class="label">
       <span class="label-text flex items-center gap-2">
@@ -212,6 +224,7 @@
       <input
         class="input w-24"
         type="number"
+        min="5"
         bind:value={form.qbt_polling_rate}
         disabled={data.settings.qbt_polling_rate.env_override}
       />

@@ -225,6 +225,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings Route */
+        get: operations["get_settings_route_settings_get"];
+        /** Save Settings Route */
+        put: operations["save_settings_route_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/events": {
         parameters: {
             query?: never;
@@ -295,6 +313,58 @@ export interface components {
             description: string;
             /** Image */
             image: string;
+        };
+        /** SettingField */
+        SettingField: {
+            /** Value */
+            value: unknown;
+            /** Env Override */
+            env_override: boolean;
+        };
+        /** SettingsResponse */
+        SettingsResponse: {
+            media_data_location: components["schemas"]["SettingField"];
+            prefer_extended: components["schemas"]["SettingField"];
+            qbt_hostname: components["schemas"]["SettingField"];
+            qbt_username: components["schemas"]["SettingField"];
+            qbt_password: components["schemas"]["SettingField"];
+            qbt_path_local: components["schemas"]["SettingField"];
+            qbt_path_remote: components["schemas"]["SettingField"];
+            qbt_category: components["schemas"]["SettingField"];
+            qbt_download_location: components["schemas"]["SettingField"];
+            qbt_polling_rate: components["schemas"]["SettingField"];
+            log_level: components["schemas"]["SettingField"];
+        };
+        /** SettingsSaveRequest */
+        SettingsSaveRequest: {
+            /** Media Data Location */
+            media_data_location: string;
+            /** Prefer Extended */
+            prefer_extended: boolean;
+            /** Qbt Hostname */
+            qbt_hostname: string;
+            /** Qbt Username */
+            qbt_username: string;
+            /** Qbt Password */
+            qbt_password: string;
+            /** Qbt Path Local */
+            qbt_path_local?: string | null;
+            /** Qbt Path Remote */
+            qbt_path_remote?: string | null;
+            /** Qbt Category */
+            qbt_category?: string | null;
+            /** Qbt Download Location */
+            qbt_download_location?: string | null;
+            /**
+             * Qbt Polling Rate
+             * @default 8
+             */
+            qbt_polling_rate: number;
+            /**
+             * Log Level
+             * @default INFO
+             */
+            log_level: string;
         };
         /** TorrentDownloadResponse */
         TorrentDownloadResponse: {
@@ -666,6 +736,59 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_route_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
+            };
+        };
+    };
+    save_settings_route_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
