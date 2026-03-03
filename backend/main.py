@@ -3,6 +3,7 @@ import signal
 import time
 from pathlib import Path
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from dotenv import load_dotenv
@@ -36,6 +37,12 @@ set_download_manager(download_manager)
 
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(api_router)
 app.mount("/posters", StaticFiles(directory="data/eps-metadata/One Pace"), name="posters")
 
