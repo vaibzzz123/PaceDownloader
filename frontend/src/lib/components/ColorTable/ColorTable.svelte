@@ -25,6 +25,7 @@
     const colors: Record<string, { bg: string; hover: string }> = {
       Hardlinked: { bg: "bg-green-500/20", hover: "hover:bg-green-500/30" },
       Copied: { bg: "bg-green-500/20", hover: "hover:bg-green-500/30" },
+      Completed: { bg: "bg-green-500/20", hover: "hover:bg-green-500/30" },
       Downloading: { bg: "bg-purple-500/20", hover: "hover:bg-purple-500/30" },
       Paused: { bg: "bg-yellow-500/20", hover: "hover:bg-yellow-500/30" },
       "Download Complete": {
