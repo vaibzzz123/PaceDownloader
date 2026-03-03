@@ -79,9 +79,19 @@ def initialize_torrent_download_table():
         con.execute("""
             CREATE TABLE IF NOT EXISTS torrent_download (
                 infohash TEXT PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'downloading',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        for col, definition in [("name", "TEXT NOT NULL DEFAULT ''"), ("status", "TEXT NOT NULL DEFAULT 'downloading'")]:
+            try:
+                con.execute(f"ALTER TABLE torrent_download ADD COLUMN {col} {definition}")
+                logger.debug("Added %s column to torrent_download table", col)
+            except Exception:
+                pass  # column already exists
+
         con.commit()
 
 
@@ -107,11 +117,20 @@ def initialize_episode_download_table():
 # --- torrent_download helpers ---
 
 
-def create_torrent_download(infohash: str):
+def create_torrent_download(infohash: str, name: str = "", status: str = "downloading"):
     with get_db() as con:
         con.execute(
-            "INSERT OR IGNORE INTO torrent_download (infohash) VALUES (?)",
-            (infohash,),
+            "INSERT OR IGNORE INTO torrent_download (infohash, name, status) VALUES (?, ?, ?)",
+            (infohash, name, status),
+        )
+        con.commit()
+
+
+def update_torrent_download_status(infohash: str, status: str):
+    with get_db() as con:
+        con.execute(
+            "UPDATE torrent_download SET status = ? WHERE infohash = ?",
+            (status, infohash),
         )
         con.commit()
 

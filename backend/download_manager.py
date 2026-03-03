@@ -74,6 +74,7 @@ class DownloadManager:
             raise ValueError(f"Could not find file with CRC32 {crc32} in torrent {infohash}")
         self.qbt_client.change_file_priority(infohash, episode_file, self.qbt_client.FilePriority.NORMAL)
         self.qbt_client.start_torrent(infohash)
+        db.update_torrent_download_status(infohash, "downloading")
 
     def _create_torrent_for_episode(self, magnet_link: str, infohash: str, crc32: str):
         torrent_info = self.qbt_client.create_torrent(magnet_link)
@@ -84,22 +85,26 @@ class DownloadManager:
             raise ValueError(f"Could not find file with CRC32 {crc32} in torrent {infohash}")
         self.qbt_client.change_file_priority(torrent_info.hash, episode_file, self.qbt_client.FilePriority.NORMAL)
         self.qbt_client.start_torrent(torrent_info.hash)
-        db.create_torrent_download(infohash)
+        db.create_torrent_download(infohash, name=torrent_info.name, status="downloading")
 
     def pause_episode(self, episode_id: int):
         episode_download = db.get_episode_download_by_ep_id(episode_id)
         if not episode_download:
             raise ValueError(f"No download found for episode ID {episode_id}")
-        self.qbt_client.pause_torrent(episode_download["torrent_infohash"])
+        infohash = episode_download["torrent_infohash"]
+        self.qbt_client.pause_torrent(infohash)
         db.update_episode_download_status(episode_download["id"], "paused")
+        db.update_torrent_download_status(infohash, "paused")
         logger.info("Paused download for episode ID %d", episode_id)
 
     def resume_episode(self, episode_id: int):
         episode_download = db.get_episode_download_by_ep_id(episode_id)
         if not episode_download:
             raise ValueError(f"No download found for episode ID {episode_id}")
-        self.qbt_client.start_torrent(episode_download["torrent_infohash"])
+        infohash = episode_download["torrent_infohash"]
+        self.qbt_client.start_torrent(infohash)
         db.update_episode_download_status(episode_download["id"], "downloading")
+        db.update_torrent_download_status(infohash, "downloading")
         logger.info("Resumed download for episode ID %d", episode_id)
 
     def remove_episode(self, episode_id: int):
@@ -141,6 +146,7 @@ class DownloadManager:
         for ep in db.get_episode_downloads_by_torrent(infohash):
             if ep["status"] == "downloading":
                 db.update_episode_download_status(ep["id"], "paused")
+        db.update_torrent_download_status(infohash, "paused")
         logger.info("Paused torrent %s", infohash)
 
     def resume_torrent(self, infohash: str):
@@ -151,6 +157,7 @@ class DownloadManager:
         for ep in db.get_episode_downloads_by_torrent(infohash):
             if ep["status"] == "paused":
                 db.update_episode_download_status(ep["id"], "downloading")
+        db.update_torrent_download_status(infohash, "downloading")
         logger.info("Resumed torrent %s", infohash)
 
     def remove_torrent(self, infohash: str):
@@ -270,6 +277,12 @@ class DownloadManager:
             shutil.copy2(src, dest)
             logger.info("Copied episode %d: %s -> %s", episode_id, src, dest)
             db.update_episode_download_status(episode_download["id"], "copy")
+
+        infohash = episode_download["torrent_infohash"]
+        remaining = db.get_episode_downloads_by_torrent(infohash)
+        if all(ep["status"] in ("hardlink", "copy") for ep in remaining):
+            db.update_torrent_download_status(infohash, "completed")
+            logger.info("All episodes for torrent %s completed", infohash)
 
     def _translate_file_path(self, file_path: str) -> str:
         settings = db.get_settings()
