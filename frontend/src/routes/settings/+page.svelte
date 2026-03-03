@@ -1,20 +1,66 @@
 <script lang="ts">
+  import { PUBLIC_BACKEND_URL } from '$env/static/public';
   import AlertTriangleIcon from "@lucide/svelte/icons/alert-triangle";
+  import type { PageProps } from "./$types";
 
+  let { data }: PageProps = $props();
 
-  const settings = $state({
-    media_data_location: { value: "asdds", is_env_var: false },
-    prefer_extended: { value: true, is_env_var: false },
-    qbt_hostname: { value: "asdds", is_env_var: true },
-    qbt_username: { value: "asdds", is_env_var: true },
-    qbt_password: { value: "asdds", is_env_var: true },
-    qbt_path_here: { value: "/path_from_here", is_env_var: true },
-    qbt_path_qbt: { value: "/path_from_qbt", is_env_var: true },
-    qbt_category: { value: "asdds", is_env_var: false },
-    qbt_download_location: { value: "asdds", is_env_var: true },
-    qbt_polling_rate: { value: 10, is_env_var: false },
-    log_level: { value: "INFO", is_env_var: false },
+  const [initPathHere = '', initPathQbt = ''] = ((data.settings.qbt_path_mapping.value as string) ?? '').split(':');
+
+  let form = $state({
+    media_data_location: (data.settings.media_data_location.value as string) ?? '',
+    prefer_extended: Boolean(data.settings.prefer_extended.value),
+    qbt_hostname: (data.settings.qbt_hostname.value as string) ?? '',
+    qbt_username: (data.settings.qbt_username.value as string) ?? '',
+    qbt_password: (data.settings.qbt_password.value as string) ?? '',
+    qbt_path_here: initPathHere,
+    qbt_path_qbt: initPathQbt,
+    qbt_category: (data.settings.qbt_category.value as string) ?? '',
+    qbt_download_location: (data.settings.qbt_download_location.value as string) ?? '',
+    qbt_polling_rate: (data.settings.qbt_polling_rate.value as number) ?? 10,
+    log_level: (data.settings.log_level.value as string) ?? 'INFO',
   });
+
+  let saveError = $state<string | null>(null);
+  let saving = $state(false);
+  let saved = $state(false);
+
+  async function saveSettings() {
+    saving = true;
+    saveError = null;
+    saved = false;
+    const pathMapping = form.qbt_path_here || form.qbt_path_qbt
+      ? `${form.qbt_path_here}:${form.qbt_path_qbt}`
+      : null;
+    try {
+      const res = await fetch(`${PUBLIC_BACKEND_URL}/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          media_data_location: form.media_data_location,
+          prefer_extended: form.prefer_extended,
+          qbt_hostname: form.qbt_hostname,
+          qbt_username: form.qbt_username,
+          qbt_password: form.qbt_password,
+          qbt_path_mapping: pathMapping,
+          qbt_category: form.qbt_category || null,
+          qbt_download_location: form.qbt_download_location || null,
+          qbt_polling_rate: form.qbt_polling_rate,
+          log_level: form.log_level,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        saveError = body.detail ?? 'Failed to save settings';
+      } else {
+        saved = true;
+      }
+    } catch {
+      saveError = 'Could not reach the server';
+    } finally {
+      saving = false;
+    }
+  }
 </script>
 
 {#snippet envChip()}
@@ -24,7 +70,15 @@
 {/snippet}
 
 <h1 class="-mt-2 text-2xl font-bold">Settings</h1>
-<form class="flex flex-col gap-6">
+
+{#if saveError}
+  <div class="preset-tonal-error rounded p-3 text-sm mt-3">{saveError}</div>
+{/if}
+{#if saved}
+  <div class="preset-tonal-success rounded p-3 text-sm mt-3">Settings saved.</div>
+{/if}
+
+<form class="flex flex-col gap-6 mt-4">
 
   <section class="flex flex-col gap-3">
     <h2 class="text-lg font-semibold">General</h2>
@@ -35,10 +89,10 @@
       <input
         class="input w-80"
         type="text"
-        bind:value={settings.media_data_location.value}
-        disabled={settings.media_data_location.is_env_var}
+        bind:value={form.media_data_location}
+        disabled={data.settings.media_data_location.env_override}
       />
-      {#if settings.media_data_location.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.media_data_location.env_override}{@render envChip()}{/if}
     </label>
     <label class="label w-fit">
       <span class="label-text flex items-center gap-2">
@@ -47,22 +101,22 @@
       <input
         class="checkbox"
         type="checkbox"
-        bind:checked={settings.prefer_extended.value}
-        disabled={settings.prefer_extended.is_env_var}
+        bind:checked={form.prefer_extended}
+        disabled={data.settings.prefer_extended.env_override}
       />
-      {#if settings.prefer_extended.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.prefer_extended.env_override}{@render envChip()}{/if}
     </label>
     <label class="label w-fit">
       <span class="label-text flex items-center gap-2">
         Log Level
       </span>
-      <select class="select pl-3" bind:value={settings.log_level.value} disabled={settings.log_level.is_env_var}>
+      <select class="select pl-3" bind:value={form.log_level} disabled={data.settings.log_level.env_override}>
         <option value="DEBUG">DEBUG</option>
         <option value="INFO">INFO</option>
         <option value="WARNING">WARNING</option>
         <option value="ERROR">ERROR</option>
       </select>
-      {#if settings.log_level.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.log_level.env_override}{@render envChip()}{/if}
     </label>
   </section>
 
@@ -75,10 +129,10 @@
       <input
         class="input w-80"
         type="text"
-        bind:value={settings.qbt_hostname.value}
-        disabled={settings.qbt_hostname.is_env_var}
+        bind:value={form.qbt_hostname}
+        disabled={data.settings.qbt_hostname.env_override}
       />
-      {#if settings.qbt_hostname.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_hostname.env_override}{@render envChip()}{/if}
     </label>
     <label class="label">
       <span class="label-text flex items-center gap-2">
@@ -87,10 +141,10 @@
       <input
         class="input w-80"
         type="text"
-        bind:value={settings.qbt_username.value}
-        disabled={settings.qbt_username.is_env_var}
+        bind:value={form.qbt_username}
+        disabled={data.settings.qbt_username.env_override}
       />
-      {#if settings.qbt_username.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_username.env_override}{@render envChip()}{/if}
     </label>
     <label class="label">
       <span class="label-text flex items-center gap-2">
@@ -100,11 +154,11 @@
       <input
         class="input w-80"
         type="password"
-        bind:value={settings.qbt_password.value}
-        disabled={settings.qbt_password.is_env_var}
+        bind:value={form.qbt_password}
+        disabled={data.settings.qbt_password.env_override}
         autocomplete="new-password"
       />
-      {#if settings.qbt_password.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_password.env_override}{@render envChip()}{/if}
     </label>
     <div class="flex flex-col">
       <span class="label-text flex items-center gap-2 mb-1">
@@ -114,18 +168,18 @@
         <input
           class="input w-96"
           type="text"
-          bind:value={settings.qbt_path_here.value}
-          disabled={settings.qbt_path_here.is_env_var}
+          bind:value={form.qbt_path_here}
+          disabled={data.settings.qbt_path_mapping.env_override}
         />
         <span class="font-bold">:</span>
         <input
           class="input w-96"
           type="text"
-          bind:value={settings.qbt_path_qbt.value}
-          disabled={settings.qbt_path_qbt.is_env_var}
+          bind:value={form.qbt_path_qbt}
+          disabled={data.settings.qbt_path_mapping.env_override}
         />
       </div>
-      {#if settings.qbt_path_here.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_path_mapping.env_override}{@render envChip()}{/if}
     </div>
     <label class="label">
       <span class="label-text flex items-center gap-2">
@@ -134,10 +188,10 @@
       <input
         class="input w-80"
         type="text"
-        bind:value={settings.qbt_category.value}
-        disabled={settings.qbt_category.is_env_var}
+        bind:value={form.qbt_category}
+        disabled={data.settings.qbt_category.env_override}
       />
-      {#if settings.qbt_category.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_category.env_override}{@render envChip()}{/if}
     </label>
     <label class="label">
       <span class="label-text flex items-center gap-2">
@@ -146,10 +200,10 @@
       <input
         class="input w-80"
         type="text"
-        bind:value={settings.qbt_download_location.value}
-        disabled={settings.qbt_download_location.is_env_var}
+        bind:value={form.qbt_download_location}
+        disabled={data.settings.qbt_download_location.env_override}
       />
-      {#if settings.qbt_download_location.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_download_location.env_override}{@render envChip()}{/if}
     </label>
     <label class="label w-fit">
       <span class="label-text flex items-center gap-2">
@@ -158,12 +212,14 @@
       <input
         class="input w-24"
         type="number"
-        bind:value={settings.qbt_polling_rate.value}
-        disabled={settings.qbt_polling_rate.is_env_var}
+        bind:value={form.qbt_polling_rate}
+        disabled={data.settings.qbt_polling_rate.env_override}
       />
-      {#if settings.qbt_polling_rate.is_env_var}{@render envChip()}{/if}
+      {#if data.settings.qbt_polling_rate.env_override}{@render envChip()}{/if}
     </label>
   </section>
 
-  <button type="button" onclick={() => console.log(settings)} class="btn preset-filled-primary-500 w-fit">Save</button>
+  <button type="button" onclick={saveSettings} disabled={saving} class="btn preset-filled-primary-500 w-fit">
+    {saving ? 'Saving…' : 'Save'}
+  </button>
 </form>

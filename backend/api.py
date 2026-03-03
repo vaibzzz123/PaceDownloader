@@ -2,7 +2,7 @@ import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse
+from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest
 from metadata import get_seasons, get_episodes
 from dependencies import get_download_manager
 from download_manager import DownloadManager
@@ -201,6 +201,32 @@ def remove_torrent_route(infohash: str, dm: DownloadManager = Depends(get_downlo
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return Response(status_code=204)
+
+
+@router.get("/settings", response_model=SettingsResponse)
+def get_settings_route():
+    settings = db.get_settings()
+    if settings is None:
+        raise HTTPException(status_code=500, detail="Settings not found")
+    return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
+
+
+@router.put("/settings", response_model=SettingsResponse)
+def save_settings_route(req: SettingsSaveRequest):
+    db.save_settings(
+        media_data_location=req.media_data_location,
+        qbt_hostname=req.qbt_hostname,
+        qbt_username=req.qbt_username,
+        qbt_password=req.qbt_password,
+        prefer_extended=req.prefer_extended,
+        qbt_path_mapping=req.qbt_path_mapping,
+        qbt_category=req.qbt_category,
+        qbt_download_location=req.qbt_download_location,
+        qbt_polling_rate=req.qbt_polling_rate,
+        log_level=req.log_level,
+    )
+    settings = db.get_settings()
+    return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
 
 
 progress = 0
