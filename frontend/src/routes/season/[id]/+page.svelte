@@ -97,10 +97,22 @@
 <div class="flex flex-col gap-6">
   <SeasonInfo num={data.season.num.toString()} title={data.season.title} image={data.season.image} description={data.season.description}>
     {#snippet actions()}
-      <button class="btn preset-filled-primary-500 rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}/download`, 'POST')}><DownloadIcon size={18}/><span>Download All</span></button>
-      <button class="btn preset-tonal-warning rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}/pause`, 'POST')}><PauseIcon size={18}/><span>Pause All</span></button>
-      <button class="btn preset-tonal-success rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}/resume`, 'POST')}><PlayIcon size={18}/><span>Resume All</span></button>
-      <button class="btn preset-tonal-error rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}`, 'DELETE')}><Trash2Icon size={18}/><span>Delete All</span></button>
+      <button class="btn preset-filled-primary-500 rounded-xl text-sm" onclick={() => {
+        for (const ep of episodes) if (DOWNLOADABLE.has(ep.status)) ep.status = 'Downloading';
+        callApi(null, `/season/${seasonNum}/download`, 'POST');
+      }}><DownloadIcon size={18}/><span>Download All</span></button>
+      <button class="btn preset-tonal-warning rounded-xl text-sm" onclick={() => {
+        for (const ep of episodes) if (PAUSABLE.has(ep.status)) ep.status = 'Paused';
+        callApi(null, `/season/${seasonNum}/pause`, 'POST');
+      }}><PauseIcon size={18}/><span>Pause All</span></button>
+      <button class="btn preset-tonal-success rounded-xl text-sm" onclick={() => {
+        for (const ep of episodes) if (RESUMABLE.has(ep.status)) ep.status = 'Downloading';
+        callApi(null, `/season/${seasonNum}/resume`, 'POST');
+      }}><PlayIcon size={18}/><span>Resume All</span></button>
+      <button class="btn preset-tonal-error rounded-xl text-sm" onclick={() => {
+        for (const ep of episodes) if (DELETABLE.has(ep.status)) ep.status = 'Not Downloaded';
+        callApi(null, `/season/${seasonNum}`, 'DELETE');
+      }}><Trash2Icon size={18}/><span>Delete All</span></button>
     {/snippet}
   </SeasonInfo>
   {#if error}
