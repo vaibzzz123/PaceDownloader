@@ -340,6 +340,13 @@ class DownloadManager:
                             "ep_id": int(ep_id),
                             "status": final_status,
                         })
+                        torrent = db.get_torrent_download(infohash)
+                        if torrent and torrent["status"] == "completed":
+                            events.append({
+                                "type": "episode_status_changed",
+                                "infohash": infohash,
+                                "status": "completed",
+                            })
                 except Exception as e:
                     logger.error("Error processing episode %s: %s", ep_id, e)
 

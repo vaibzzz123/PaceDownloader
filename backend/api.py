@@ -269,5 +269,6 @@ async def downloads_sse():
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "Connection": "close",
         },
     )
