@@ -51,8 +51,8 @@
     return () => source.close();
   });
 
-  async function callApi(episodeId: number, path: string, method: string) {
-    loadingIds.add(episodeId);
+  async function callApi(episodeId: number | null, path: string, method: string) {
+    if (episodeId !== null) loadingIds.add(episodeId);
     error = null;
     try {
       const res = await fetch(`${PUBLIC_BACKEND_URL}${path}`, { method });
@@ -60,21 +60,33 @@
         const body = await res.json().catch(() => ({}));
         error = body.detail ?? 'Request failed';
       } else if (res.status === 204) {
-        // DELETE — episode is no longer being tracked
-        const ep = episodes.find(e => e.ep_id === episodeId);
-        if (ep) ep.status = 'Not Downloaded';
+        // DELETE — episode(s) no longer tracked
+        if (episodeId !== null) {
+          const ep = episodes.find(e => e.ep_id === episodeId);
+          if (ep) ep.status = 'Not Downloaded';
+        } else {
+          for (const ep of episodes) ep.status = 'Not Downloaded';
+        }
       } else {
-        // Download / pause / resume — response is EpisodeResponse with updated status
         const updated = await res.json();
-        const ep = episodes.find(e => e.ep_id === episodeId);
-        if (ep && updated.status) ep.status = updated.status;
+        if (Array.isArray(updated)) {
+          for (const u of updated) {
+            const ep = episodes.find(e => e.ep_id === u.ep_id);
+            if (ep && u.status) ep.status = u.status;
+          }
+        } else {
+          const ep = episodes.find(e => e.ep_id === episodeId);
+          if (ep && updated.status) ep.status = updated.status;
+        }
       }
     } catch {
       error = 'Could not reach the server';
     } finally {
-      loadingIds.delete(episodeId);
+      if (episodeId !== null) loadingIds.delete(episodeId);
     }
   }
+
+  const seasonNum = data.season.num;
 
   const DOWNLOADABLE = new Set(['Not Downloaded', 'Error']);
   const PAUSABLE     = new Set(['Downloading', 'Pending']);
@@ -83,7 +95,14 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  <SeasonInfo num={data.season.num.toString()} title={data.season.title} image={data.season.image} description={data.season.description} />
+  <SeasonInfo num={data.season.num.toString()} title={data.season.title} image={data.season.image} description={data.season.description}>
+    {#snippet actions()}
+      <button class="btn preset-filled-primary-500 rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}/download`, 'POST')}><DownloadIcon size={18}/><span>Download All</span></button>
+      <button class="btn preset-tonal-warning rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}/pause`, 'POST')}><PauseIcon size={18}/><span>Pause All</span></button>
+      <button class="btn preset-tonal-success rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}/resume`, 'POST')}><PlayIcon size={18}/><span>Resume All</span></button>
+      <button class="btn preset-tonal-error rounded-xl text-sm" onclick={() => callApi(null, `/season/${seasonNum}`, 'DELETE')}><Trash2Icon size={18}/><span>Delete All</span></button>
+    {/snippet}
+  </SeasonInfo>
   {#if error}
     <div class="preset-tonal-error rounded p-3 text-sm">{error}</div>
   {/if}
