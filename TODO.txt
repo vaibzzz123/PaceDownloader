@@ -2,7 +2,7 @@ Main things left to implement for MVP:
 - API endpoints and frontend wiring for seasons page episodes (done!)
 - API endpoints and frontend wiring for episode downloads (done!)
 - API endpoints and frontend wiring for torrent downloads (done!)
-- SSE endpoint for download events
+- SSE endpoint for download events (done!)
 - Download all button/endpoint on season page, maybe pause all/resume all and delete all
 - settings page and API endpoint for settings (done!)
 - If episode files are already downloaded in the right location, create a download record for them
