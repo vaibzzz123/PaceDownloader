@@ -187,23 +187,115 @@ async def remove_episode_route(episode_id: int, dm: DownloadManager = Depends(ge
     return Response(status_code=204)
 
 
-@router.post("/torrent/{infohash}/pause", status_code=204)
+@router.post("/torrent/{infohash}/pause", response_model=TorrentDownloadResponse)
 async def pause_torrent_route(infohash: str, dm: DownloadManager = Depends(get_download_manager)):
     try:
         await asyncio.to_thread(dm.pause_torrent, infohash)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": "paused"})
-    return Response(status_code=204)
+    torrent = db.get_torrent_download(infohash)
+    ep_ids = [int(ep["ep_id"]) for ep in db.get_episode_downloads_by_torrent(infohash)]
+    return TorrentDownloadResponse(infohash=torrent["infohash"], name=torrent["name"] or torrent["infohash"], status=_STATUS_MAP.get(torrent["status"], torrent["status"]), progress=0.0, ep_ids=ep_ids)
 
 
-@router.post("/torrent/{infohash}/resume", status_code=204)
+@router.post("/torrent/{infohash}/resume", response_model=TorrentDownloadResponse)
 async def resume_torrent_route(infohash: str, dm: DownloadManager = Depends(get_download_manager)):
     try:
         await asyncio.to_thread(dm.resume_torrent, infohash)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": "downloading"})
+    torrent = db.get_torrent_download(infohash)
+    ep_ids = [int(ep["ep_id"]) for ep in db.get_episode_downloads_by_torrent(infohash)]
+    return TorrentDownloadResponse(infohash=torrent["infohash"], name=torrent["name"] or torrent["infohash"], status=_STATUS_MAP.get(torrent["status"], torrent["status"]), progress=0.0, ep_ids=ep_ids)
+
+
+@router.post("/season/{season_num}/download", response_model=list[EpisodeResponse])
+async def download_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
+    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    if not season_episodes:
+        raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
+    settings = db.get_settings()
+    prefer_extended = settings["prefer_extended"]["value"] if settings else True
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        if info and info["status"] in ("pending", "downloading", "paused", "hardlink", "copy", "completed"):
+            continue
+        try:
+            await asyncio.to_thread(dm.download_episode, ep["id"], prefer_extended)
+            downloads_broadcaster.publish({"type": "episode_download_started", "ep_id": ep["id"], "status": "downloading"})
+        except Exception:
+            pass
+    result = []
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
+        result.append(EpisodeResponse(ep_id=ep["id"], season=ep["season"], number=ep["ep_number"], title=ep["title"], duration=ep["duration"], status=status))
+    return result
+
+
+@router.post("/season/{season_num}/pause", response_model=list[EpisodeResponse])
+async def pause_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
+    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    if not season_episodes:
+        raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        if not info or info["status"] not in ("downloading", "pending"):
+            continue
+        try:
+            await asyncio.to_thread(dm.pause_episode, ep["id"])
+            downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": ep["id"], "status": "paused"})
+        except Exception:
+            pass
+    result = []
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
+        result.append(EpisodeResponse(ep_id=ep["id"], season=ep["season"], number=ep["ep_number"], title=ep["title"], duration=ep["duration"], status=status))
+    return result
+
+
+@router.post("/season/{season_num}/resume", response_model=list[EpisodeResponse])
+async def resume_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
+    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    if not season_episodes:
+        raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        if not info or info["status"] != "paused":
+            continue
+        try:
+            await asyncio.to_thread(dm.resume_episode, ep["id"])
+            downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": ep["id"], "status": "downloading"})
+        except Exception:
+            pass
+    result = []
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
+        result.append(EpisodeResponse(ep_id=ep["id"], season=ep["season"], number=ep["ep_number"], title=ep["title"], duration=ep["duration"], status=status))
+    return result
+
+
+@router.delete("/season/{season_num}", status_code=204)
+async def delete_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
+    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    if not season_episodes:
+        raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
+    for ep in season_episodes:
+        info = dm.get_episode_info(ep["id"])
+        if not info:
+            continue
+        try:
+            torrent_change = await asyncio.to_thread(dm.remove_episode, ep["id"])
+            downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": ep["id"], "status": "removed"})
+            if torrent_change:
+                infohash, new_status = torrent_change
+                downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": new_status})
+        except Exception:
+            pass
     return Response(status_code=204)
 
 
