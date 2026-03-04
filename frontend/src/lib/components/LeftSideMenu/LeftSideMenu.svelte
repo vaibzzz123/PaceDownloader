@@ -15,7 +15,7 @@
   let open = $state(false);
 
   const links = [
-    { label: 'Episodes', href: '/' },
+    { label: 'Seasons', href: '/' },
     { label: 'Downloads', href: '/downloads' },
     { label: 'Settings', href: '/settings' },
   ];

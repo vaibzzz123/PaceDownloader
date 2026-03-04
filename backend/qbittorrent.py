@@ -65,9 +65,13 @@ class QbittorrentClient:
                 category=self._category if self._category else None,
                 save_path=self._download_location if self._download_location else None,
             )
-            if resp != "Ok.":
+            if resp == "Fails.":
+                # Torrent already exists in qBittorrent (duplicate add) — proceed to use it
+                logger.info("Torrent %s already in qBittorrent, reusing", info_hash)
+            elif resp != "Ok.":
                 raise Exception(f"Failed to add torrent: {resp}")
-            logger.info("Added torrent for magnet link: %s", torrent_magnet_link)
+            else:
+                logger.info("Added torrent for magnet link: %s", torrent_magnet_link)
             logger.info(
                 "Waiting for metadata to be fetched for torrent with hash: %s",
                 info_hash,
