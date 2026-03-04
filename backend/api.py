@@ -222,6 +222,8 @@ def get_settings_route():
     settings = db.get_settings()
     if settings is None:
         raise HTTPException(status_code=500, detail="Settings not found")
+    if settings.get("qbt_password", {}).get("value"):
+        settings["qbt_password"]["value"] = "********"
     return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
 
 
