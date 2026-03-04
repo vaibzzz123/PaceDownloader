@@ -142,7 +142,7 @@ class DownloadManager:
             self.qbt_client.stop_torrent(infohash)
             db.delete_torrent_download(infohash)
             logger.info("Removed torrent %s from qBittorrent (no remaining episodes)", infohash)
-            return None
+            return (infohash, "removed")
         elif all(ep["status"] in ("hardlink", "copy") for ep in remaining):
             db.update_torrent_download_status(infohash, "completed")
             logger.info("Torrent %s marked completed after episode %d removed", infohash, episode_id)
