@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { invalidateAll } from '$app/navigation';
+  import { browser } from '$app/environment';
+  import { untrack } from 'svelte';
   import { PUBLIC_BACKEND_URL } from '$env/static/public';
   import { SvelteSet } from 'svelte/reactivity';
   import SeasonInfo from '$lib/components/SeasonInfo/SeasonInfo.svelte';
@@ -14,11 +15,41 @@
 
   let { data }: PageProps = $props();
 
+  // Local mutable copy — SSE patches status in place without server re-fetches.
+  // untrack: intentionally capture data once; component remounts on navigation with fresh data.
+  let episodes = $state(untrack(() => data.episodes.map(e => ({ ...e }))));
+
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
-  const episodes = $derived(data.episodes);
 
   let loadingIds = new SvelteSet<number>();
   let error = $state<string | null>(null);
+
+  // Maps raw SSE status strings to the display strings the API already uses
+  const SSE_STATUS_MAP: Record<string, string> = {
+    downloading: 'Downloading',
+    pending: 'Pending',
+    paused: 'Paused',
+    hardlink: 'Hardlinked',
+    copy: 'Copied',
+    error: 'Error',
+    removed: 'Not Downloaded',
+  };
+
+  // Only cares about status changes — no progress bars on this page
+  $effect(() => {
+    if (!browser) return;
+    const source = new EventSource(`${PUBLIC_BACKEND_URL}/events/downloads`);
+    source.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data);
+        if (event.ep_id === undefined) return;
+        if (event.type !== 'episode_download_started' && event.type !== 'episode_status_changed') return;
+        const ep = episodes.find(ep => ep.ep_id === event.ep_id);
+        if (ep) ep.status = SSE_STATUS_MAP[event.status] ?? event.status;
+      } catch {}
+    };
+    return () => source.close();
+  });
 
   async function callApi(episodeId: number, path: string, method: string) {
     loadingIds.add(episodeId);
@@ -28,8 +59,15 @@
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         error = body.detail ?? 'Request failed';
+      } else if (res.status === 204) {
+        // DELETE — episode is no longer being tracked
+        const ep = episodes.find(e => e.ep_id === episodeId);
+        if (ep) ep.status = 'Not Downloaded';
       } else {
-        await invalidateAll();
+        // Download / pause / resume — response is EpisodeResponse with updated status
+        const updated = await res.json();
+        const ep = episodes.find(e => e.ep_id === episodeId);
+        if (ep && updated.status) ep.status = updated.status;
       }
     } catch {
       error = 'Could not reach the server';

@@ -1,6 +1,6 @@
 import asyncio
 import json
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse, JSONResponse
 from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest
 from metadata import get_seasons, get_episodes
@@ -126,7 +126,7 @@ async def download_episode_route(episode_id: int, dm: DownloadManager = Depends(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    downloads_broadcaster.publish({"type": "episode_download_started", "ep_id": episode_id})
+    downloads_broadcaster.publish({"type": "episode_download_started", "ep_id": episode_id, "status": "downloading"})
 
     info = dm.get_episode_info(episode_id)
     status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
@@ -247,14 +247,12 @@ def save_settings_route(req: SettingsSaveRequest):
 
 
 @router.get("/events/downloads")
-async def downloads_sse(request: Request):
+async def downloads_sse():
     q = downloads_broadcaster.subscribe()
 
     async def event_stream():
         try:
             while True:
-                if await request.is_disconnected():
-                    break
                 try:
                     event = await asyncio.wait_for(q.get(), timeout=15)
                     if event is None:  # shutdown sentinel from broadcaster.close()
