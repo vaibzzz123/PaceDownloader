@@ -178,6 +178,11 @@ class DownloadManager:
         if not torrent:
             raise ValueError(f"No torrent found with infohash {infohash}")
         self.qbt_client.stop_torrent(infohash)
+        for ep in db.get_episode_downloads_by_torrent(infohash):
+            file_path_disk = ep["file_path_disk"]
+            if file_path_disk and os.path.exists(file_path_disk):
+                os.remove(file_path_disk)
+                logger.info("Removed disk file for episode %d: %s", ep["ep_id"], file_path_disk)
         db.delete_episode_downloads_by_torrent(infohash)
         db.delete_torrent_download(infohash)
         logger.info("Removed torrent %s", infohash)
