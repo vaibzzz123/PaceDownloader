@@ -430,8 +430,9 @@ class DownloadManager:
 
             ep_info = {"ep_id": ep["id"], "title": ep.get("title", ""), "season": ep.get("season", 0)}
 
-            if db.get_episode_download_by_ep_id(ep["id"]):
-                already_tracked.append(ep_info)
+            existing = db.get_episode_download_by_ep_id(ep["id"])
+            if existing:
+                already_tracked.append({**ep_info, "status": existing["status"]})
                 continue
 
             try:
