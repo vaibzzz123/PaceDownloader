@@ -25,8 +25,22 @@ class EpisodeDownloadResponse(BaseModel):
     extended: bool
     status: str
     progress: float
-    torrent_infohash: str
-    torrent_name: str
+    torrent_infohash: str | None
+    torrent_name: str | None
+
+
+class ScanEpisodeInfo(BaseModel):
+    ep_id: int
+    title: str
+    season: int
+    status: str | None = None  # set for found items
+    error: str | None = None   # set for error items
+
+
+class ScanResultResponse(BaseModel):
+    found: list[ScanEpisodeInfo]
+    already_tracked: list[ScanEpisodeInfo]
+    errors: list[ScanEpisodeInfo]
 
 
 class TorrentDownloadResponse(BaseModel):

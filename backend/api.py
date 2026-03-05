@@ -2,7 +2,7 @@ import asyncio
 import json
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest
+from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest, ScanResultResponse
 from metadata import get_seasons, get_episodes
 from dependencies import get_download_manager
 from download_manager import DownloadManager
@@ -20,6 +20,7 @@ _STATUS_MAP = {
     "copy":        "Copied",
     "completed":   "Completed",
     "error":       "Error",
+    "imported":    "Imported",
 }
 
 @router.get("/health")
@@ -338,6 +339,14 @@ def save_settings_route(req: SettingsSaveRequest):
     )
     settings = db.get_settings()
     return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
+
+
+@router.post("/scan", response_model=ScanResultResponse)
+async def scan_existing_episodes_route(dm: DownloadManager = Depends(get_download_manager)):
+    result = await asyncio.to_thread(dm.scan_existing_episodes)
+    if result["found"]:
+        downloads_broadcaster.publish({"type": "scan_complete"})
+    return ScanResultResponse(**result)
 
 
 @router.get("/events/downloads")

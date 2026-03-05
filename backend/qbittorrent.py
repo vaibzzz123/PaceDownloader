@@ -129,6 +129,14 @@ class QbittorrentClient:
             )
             raise
 
+    def get_all_torrents(self) -> list:
+        """Get all torrents currently in qBittorrent."""
+        try:
+            return list(self._client.torrents_info())
+        except Exception as e:
+            logger.error("Failed to get all torrents: %s", e)
+            raise
+
     def get_torrents_info(self, info_hashes: list[str]) -> dict:
         """Retrieve torrent info for multiple hashes in a single API call. Returns dict keyed by hash."""
         try:

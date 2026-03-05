@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -35,9 +36,23 @@ download_manager = DownloadManager(qbt_client)
 set_download_manager(download_manager)
 
 
+async def _startup_scan():
+    try:
+        result = await asyncio.to_thread(download_manager.scan_existing_episodes)
+        found = len(result.get("found", []))
+        already_tracked = len(result.get("already_tracked", []))
+        errors = len(result.get("errors", []))
+        logger.info("Startup scan complete: found=%d, already_tracked=%d, errors=%d", found, already_tracked, errors)
+        if found:
+            downloads_broadcaster.publish({"type": "scan_complete"})
+    except Exception as e:
+        logger.warning("Startup scan failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await download_manager.start_polling()
+    asyncio.create_task(_startup_scan())
     yield
     downloads_broadcaster.close()
     metadata_broadcaster.close()

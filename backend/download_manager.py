@@ -122,10 +122,11 @@ class DownloadManager:
         infohash = episode_download["torrent_infohash"]
         crc32 = episode_download["crc32"]
 
-        # Set file priority to don't download in qBittorrent
-        episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
-        if episode_file:
-            self.qbt_client.change_file_priority(infohash, episode_file, self.qbt_client.FilePriority.DONT_DOWNLOAD)
+        if infohash is not None:
+            # Set file priority to don't download in qBittorrent
+            episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
+            if episode_file:
+                self.qbt_client.change_file_priority(infohash, episode_file, self.qbt_client.FilePriority.DONT_DOWNLOAD)
 
         # Delete the file at the disk (hardlink/copy) location
         file_path_disk = episode_download["file_path_disk"]
@@ -135,6 +136,10 @@ class DownloadManager:
 
         # Remove the episode download DB record
         db.delete_episode_download(episode_download["id"])
+
+        if infohash is None:
+            logger.info("Removed imported episode download for episode ID %d", episode_id)
+            return None
 
         # Update the torrent's status based on what's left
         remaining = db.get_episode_downloads_by_torrent(infohash)
@@ -194,7 +199,7 @@ class DownloadManager:
 
         info = dict(episode_download)
 
-        if episode_download["status"] in ("hardlink", "copy"):
+        if episode_download["status"] in ("hardlink", "copy", "imported"):
             info["download_progress"] = 1.0
         else:
             infohash = episode_download["torrent_infohash"]
@@ -225,15 +230,21 @@ class DownloadManager:
             by_infohash.setdefault(dl["torrent_infohash"], []).append(dl)
 
         progress_map: dict[int, float] = {}
-        torrent_name_map: dict[str, str] = {}
+        torrent_name_map: dict[str | None, str] = {}
         for infohash, eps in by_infohash.items():
+            if infohash is None:
+                # Imported episodes have no torrent; file is already on disk
+                torrent_name_map[None] = ""
+                for ep in eps:
+                    progress_map[int(ep["ep_id"])] = 100.0
+                continue
             torrent_record = db.get_torrent_download(infohash)
             torrent_name_map[infohash] = torrent_record["name"] if torrent_record and torrent_record["name"] else infohash
             try:
                 files = self.qbt_client.get_torrent_files(infohash)
                 for ep in eps:
                     ep_id = int(ep["ep_id"])
-                    if ep["status"] in ("hardlink", "copy"):
+                    if ep["status"] in ("hardlink", "copy", "imported"):
                         progress_map[ep_id] = 100.0
                     else:
                         matching = next((f for f in files if ep["crc32"].lower() in f.name.lower()), None)
@@ -242,14 +253,14 @@ class DownloadManager:
                 logger.warning("Could not fetch files for torrent %s: %s", infohash, e)
                 for ep in eps:
                     ep_id = int(ep["ep_id"])
-                    progress_map[ep_id] = 100.0 if ep["status"] in ("hardlink", "copy") else 0.0
+                    progress_map[ep_id] = 100.0 if ep["status"] in ("hardlink", "copy", "imported") else 0.0
 
         return [
             {
                 **dl,
                 "ep_id": int(dl["ep_id"]),
                 "progress": progress_map.get(int(dl["ep_id"]), 0.0),
-                "torrent_name": torrent_name_map.get(dl["torrent_infohash"], dl["torrent_infohash"]),
+                "torrent_name": torrent_name_map.get(dl["torrent_infohash"], dl["torrent_infohash"] or ""),
             }
             for dl in episode_downloads
         ]
@@ -372,6 +383,128 @@ class DownloadManager:
             except Exception as e:
                 logger.error("Error during poll cycle: %s", e)
             await asyncio.sleep(interval)
+
+    def scan_existing_episodes(self) -> dict:
+        """Scan for pre-existing episode files and create DB records.
+
+        Iterates episode metadata and checks whether each expected file exists on disk,
+        then searches qBittorrent for an associated completed torrent by CRC32 substring
+        match. No Nyaa API calls needed. Torrent file lists are fetched lazily and cached
+        per hash to avoid redundant API calls.
+
+        Returns a dict with keys: found, already_tracked, errors — each a list of
+        episode info dicts (ep_id, title, season) with status for found and error for errors.
+        """
+        found: list[dict] = []
+        already_tracked: list[dict] = []
+        errors: list[dict] = []
+
+        settings = db.get_settings()
+        if not settings:
+            logger.warning("Scan: no settings found, aborting")
+            return {"found": found, "already_tracked": already_tracked, "errors": errors}
+
+        prefer_extended = bool(settings["prefer_extended"]["value"])
+
+        # Fetch all qbt torrents once; files are fetched lazily per torrent and cached
+        all_torrents = []
+        torrent_files_cache: dict[str, list] = {}
+        try:
+            all_torrents = self.qbt_client.get_all_torrents()
+        except Exception as e:
+            logger.warning("Scan: could not reach qBittorrent, all found episodes will be 'imported': %s", e)
+
+        def get_files(infohash: str) -> list:
+            if infohash not in torrent_files_cache:
+                try:
+                    torrent_files_cache[infohash] = self.qbt_client.get_torrent_files(infohash)
+                except Exception as exc:
+                    logger.warning("Scan: could not fetch files for torrent %s: %s", infohash, exc)
+                    torrent_files_cache[infohash] = []
+            return torrent_files_cache[infohash]
+
+        for ep in get_episodes():
+            file_path = ep.get("file_location_media")
+            if not file_path or not os.path.exists(file_path):
+                continue
+
+            ep_info = {"ep_id": ep["id"], "title": ep.get("title", ""), "season": ep.get("season", 0)}
+
+            if db.get_episode_download_by_ep_id(ep["id"]):
+                already_tracked.append(ep_info)
+                continue
+
+            try:
+                if prefer_extended and ep.get("crc32_extended"):
+                    crc32 = ep["crc32_extended"]
+                    is_extended = True
+                else:
+                    crc32 = ep.get("crc32") or ""
+                    is_extended = False
+
+                # Search qbt for a torrent containing this CRC32 file, fully downloaded
+                matched_torrent = None
+                matched_file = None
+                if crc32:
+                    for torrent in all_torrents:
+                        for f in get_files(torrent.hash):
+                            if f.name and crc32.lower() in f.name.lower() and f.progress >= 1.0:
+                                matched_torrent = torrent
+                                matched_file = f
+                                break
+                        if matched_torrent:
+                            break
+
+                if matched_torrent and matched_file:
+                    file_path_torrent = self._translate_file_path(
+                        os.path.join(matched_torrent.save_path, matched_file.name)
+                    )
+                    # Detect hardlink vs copy via inode comparison
+                    status = "copy"
+                    if os.path.exists(file_path_torrent):
+                        try:
+                            st_t = os.stat(file_path_torrent)
+                            st_d = os.stat(file_path)
+                            if st_t.st_ino == st_d.st_ino and st_t.st_dev == st_d.st_dev:
+                                status = "hardlink"
+                        except OSError:
+                            pass
+
+                    torrent_infohash = matched_torrent.hash
+                    if not db.get_torrent_download(torrent_infohash):
+                        db.create_torrent_download(torrent_infohash, name=matched_torrent.name, status="completed")
+                    db.create_episode_download(
+                        ep_id=ep["id"],
+                        crc32=crc32,
+                        torrent_infohash=torrent_infohash,
+                        prefer_extended=is_extended,
+                        file_path_torrent=file_path_torrent,
+                        file_path_disk=file_path,
+                        status=status,
+                    )
+                    logger.info("Scan: episode %d linked to torrent %s (%s)", ep["id"], torrent_infohash, status)
+                    found.append({**ep_info, "status": status})
+                else:
+                    db.create_episode_download(
+                        ep_id=ep["id"],
+                        crc32=crc32,
+                        torrent_infohash=None,
+                        prefer_extended=is_extended,
+                        file_path_disk=file_path,
+                        status="imported",
+                    )
+                    logger.info("Scan: episode %d imported (no associated torrent found)", ep["id"])
+                    found.append({**ep_info, "status": "imported"})
+
+            except Exception as e:
+                logger.error("Scan: error processing episode %d: %s", ep["id"], e)
+                errors.append({**ep_info, "error": str(e)})
+
+        logger.info(
+            "Scan complete: found=%d, already_tracked=%d, errors=%d",
+            len(found), len(already_tracked), len(errors),
+        )
+        return {"found": found, "already_tracked": already_tracked, "errors": errors}
 
     def _add_episode_to_data_location(self, episode_id: int) -> str:
         """Place the downloaded file at the media location. Returns the final status string."""
