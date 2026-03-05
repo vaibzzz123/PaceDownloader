@@ -145,7 +145,13 @@ async def pause_episode_route(episode_id: int, dm: DownloadManager = Depends(get
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": episode_id, "status": "paused"})
+    ep_dl = db.get_episode_download_by_ep_id(episode_id)
+    if ep_dl and ep_dl["torrent_infohash"]:
+        infohash = ep_dl["torrent_infohash"]
+        downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": "paused"})
+        for sibling in db.get_episode_downloads_by_torrent(infohash):
+            if sibling["status"] == "paused":
+                downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": int(sibling["ep_id"]), "status": "paused"})
 
     info = dm.get_episode_info(episode_id)
     status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
@@ -163,7 +169,13 @@ async def resume_episode_route(episode_id: int, dm: DownloadManager = Depends(ge
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": episode_id, "status": "downloading"})
+    ep_dl = db.get_episode_download_by_ep_id(episode_id)
+    if ep_dl and ep_dl["torrent_infohash"]:
+        infohash = ep_dl["torrent_infohash"]
+        downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": "downloading"})
+        for sibling in db.get_episode_downloads_by_torrent(infohash):
+            if sibling["status"] == "downloading":
+                downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": int(sibling["ep_id"]), "status": "downloading"})
 
     info = dm.get_episode_info(episode_id)
     status = _STATUS_MAP.get(info["status"], info["status"]) if info else "Not Downloaded"
@@ -196,7 +208,11 @@ async def pause_torrent_route(infohash: str, dm: DownloadManager = Depends(get_d
         raise HTTPException(status_code=404, detail=str(e))
     downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": "paused"})
     torrent = db.get_torrent_download(infohash)
-    ep_ids = [int(ep["ep_id"]) for ep in db.get_episode_downloads_by_torrent(infohash)]
+    siblings = db.get_episode_downloads_by_torrent(infohash)
+    for sibling in siblings:
+        if sibling["status"] == "paused":
+            downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": int(sibling["ep_id"]), "status": "paused"})
+    ep_ids = [int(ep["ep_id"]) for ep in siblings]
     return TorrentDownloadResponse(infohash=torrent["infohash"], name=torrent["name"] or torrent["infohash"], status=_STATUS_MAP.get(torrent["status"], torrent["status"]), progress=0.0, ep_ids=ep_ids)
 
 
@@ -208,7 +224,11 @@ async def resume_torrent_route(infohash: str, dm: DownloadManager = Depends(get_
         raise HTTPException(status_code=404, detail=str(e))
     downloads_broadcaster.publish({"type": "episode_status_changed", "infohash": infohash, "status": "downloading"})
     torrent = db.get_torrent_download(infohash)
-    ep_ids = [int(ep["ep_id"]) for ep in db.get_episode_downloads_by_torrent(infohash)]
+    siblings = db.get_episode_downloads_by_torrent(infohash)
+    for sibling in siblings:
+        if sibling["status"] == "downloading":
+            downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": int(sibling["ep_id"]), "status": "downloading"})
+    ep_ids = [int(ep["ep_id"]) for ep in siblings]
     return TorrentDownloadResponse(infohash=torrent["infohash"], name=torrent["name"] or torrent["infohash"], status=_STATUS_MAP.get(torrent["status"], torrent["status"]), progress=0.0, ep_ids=ep_ids)
 
 

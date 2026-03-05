@@ -94,7 +94,9 @@ class DownloadManager:
             raise ValueError(f"No download found for episode ID {episode_id}")
         infohash = episode_download["torrent_infohash"]
         self.qbt_client.pause_torrent(infohash)
-        db.update_episode_download_status(episode_download["id"], "paused")
+        for ep in db.get_episode_downloads_by_torrent(infohash):
+            if ep["status"] == "downloading":
+                db.update_episode_download_status(ep["id"], "paused")
         db.update_torrent_download_status(infohash, "paused")
         logger.info("Paused download for episode ID %d", episode_id)
 
@@ -104,7 +106,9 @@ class DownloadManager:
             raise ValueError(f"No download found for episode ID {episode_id}")
         infohash = episode_download["torrent_infohash"]
         self.qbt_client.start_torrent(infohash)
-        db.update_episode_download_status(episode_download["id"], "downloading")
+        for ep in db.get_episode_downloads_by_torrent(infohash):
+            if ep["status"] == "paused":
+                db.update_episode_download_status(ep["id"], "downloading")
         db.update_torrent_download_status(infohash, "downloading")
         logger.info("Resumed download for episode ID %d", episode_id)
 
