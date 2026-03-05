@@ -124,7 +124,7 @@ def initialize_episode_download_table():
             CREATE TABLE IF NOT EXISTS episode_download (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 ep_id TEXT NOT NULL,
-                torrent_infohash TEXT NOT NULL REFERENCES torrent_download(infohash),
+                torrent_infohash TEXT REFERENCES torrent_download(infohash),
                 crc32 TEXT NOT NULL,
                 prefer_extended INTEGER NOT NULL DEFAULT 0,
                 file_path_torrent TEXT,
@@ -133,6 +133,30 @@ def initialize_episode_download_table():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Migration: remove NOT NULL constraint from torrent_infohash if present
+        cols = {row["name"]: row for row in con.execute("PRAGMA table_info(episode_download)").fetchall()}
+        torrent_col = cols.get("torrent_infohash")
+        if torrent_col and torrent_col["notnull"] == 1:
+            logger.info("Migrating episode_download: making torrent_infohash nullable")
+            con.execute("""
+                CREATE TABLE episode_download_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ep_id TEXT NOT NULL,
+                    torrent_infohash TEXT REFERENCES torrent_download(infohash),
+                    crc32 TEXT NOT NULL,
+                    prefer_extended INTEGER NOT NULL DEFAULT 0,
+                    file_path_torrent TEXT,
+                    file_path_disk TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            con.execute("INSERT INTO episode_download_new SELECT * FROM episode_download")
+            con.execute("DROP TABLE episode_download")
+            con.execute("ALTER TABLE episode_download_new RENAME TO episode_download")
+            logger.info("Migration complete: torrent_infohash is now nullable")
+
         con.commit()
 
 
@@ -189,8 +213,8 @@ def clear_all_downloads():
 
 def create_episode_download(
     ep_id: str,
-    torrent_infohash: str,
     crc32: str,
+    torrent_infohash: str | None = None,
     prefer_extended: bool = False,
     file_path_torrent: str | None = None,
     file_path_disk: str | None = None,
