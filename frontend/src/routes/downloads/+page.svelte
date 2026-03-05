@@ -10,18 +10,22 @@
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
   import Trash2Icon from "@lucide/svelte/icons/trash-2";
+  import ScanSearchIcon from "@lucide/svelte/icons/scan-search";
   import SpoilerText from "$lib/components/SpoilerText/SpoilerText.svelte";
   import DownloadProgress from "$lib/components/DownloadProgress/DownloadProgress.svelte";
   import type { PageProps } from "./$types";
 
   let { data }: PageProps = $props();
 
+  type ScanEpisodeInfo = { ep_id: number; title: string; season: number; status: string | null; error: string | null };
+  type ScanResult = { found: ScanEpisodeInfo[]; already_tracked: ScanEpisodeInfo[]; errors: ScanEpisodeInfo[] };
+
   // Local mutable copies — SSE updates progress/status in place
   let episodes = $state(untrack(() => data.episodes.map(e => ({ ...e }))));
   let torrents = $state(untrack(() => data.torrents.map(t => ({ ...t }))));
 
   // Sync when server data changes — only triggered when invalidateAll() is called
-  // (on episode_download_started, to pull in the new row)
+  // (on episode_download_started / scan_complete, to pull in new rows)
   $effect(() => { episodes = data.episodes.map(e => ({ ...e })); });
   $effect(() => { torrents = data.torrents.map(t => ({ ...t })); });
 
@@ -30,6 +34,9 @@
   let episodeLoadingIds = new SvelteSet<number | string>();
   let torrentLoadingIds = new SvelteSet<number | string>();
   let error = $state<string | null>(null);
+  let scanResult = $state<ScanResult | null>(null);
+
+  const scanning = $derived(episodeLoadingIds.has('scan'));
 
   const SSE_STATUS_MAP: Record<string, string> = {
     downloading: 'Downloading',
@@ -39,6 +46,7 @@
     copy: 'Copied',
     error: 'Error',
     completed: 'Completed',
+    imported: 'Imported',
   };
 
   $effect(() => {
@@ -72,8 +80,7 @@
               if (t) t.status = SSE_STATUS_MAP[event.status] ?? event.status;
             }
           }
-        } else if (event.type === 'episode_download_started') {
-          // Re-fetch to get the new episode row — not enough data to add it locally
+        } else if (event.type === 'episode_download_started' || event.type === 'scan_complete') {
           invalidateAll();
         }
       } catch {}
@@ -81,16 +88,23 @@
     return () => source.close();
   });
 
-  async function callApi(loadingIds: SvelteSet<number | string>, id: number | string, path: string, method: string) {
+  async function callApi(
+    loadingIds: SvelteSet<number | string>,
+    id: number | string,
+    path: string,
+    method: string,
+    onSuccess?: (res: Response) => Promise<void>,
+  ) {
     loadingIds.add(id);
     error = null;
     try {
       const res = await fetch(`${PUBLIC_BACKEND_URL}${path}`, { method });
-      if (!res.ok) {
+      if (res.ok) {
+        if (onSuccess) await onSuccess(res);
+      } else {
         const body = await res.json().catch(() => ({}));
         error = body.detail ?? 'Request failed';
       }
-      // Status/progress updates arrive via SSE — no invalidateAll needed
     } catch {
       error = 'Could not reach the server';
     } finally {
@@ -100,17 +114,42 @@
 
   const EP_PAUSABLE  = new Set(['Downloading', 'Pending']);
   const EP_RESUMABLE = new Set(['Paused']);
-  const EP_DELETABLE = new Set(['Pending', 'Downloading', 'Paused', 'Hardlinked', 'Copied', 'Error']);
+  const EP_DELETABLE = new Set(['Pending', 'Downloading', 'Paused', 'Hardlinked', 'Copied', 'Error', 'Imported']);
 
   const T_PAUSABLE  = new Set(['Downloading', 'Pending']);
   const T_RESUMABLE = new Set(['Paused']);
   const T_DELETABLE = new Set(['Pending', 'Downloading', 'Paused', 'Completed', 'Error']);
 </script>
 
-<h1 class="-mt-2 text-2xl font-bold">Downloads</h1>
+<div class="flex items-center justify-between -mt-2 mb-4">
+  <h1 class="text-2xl font-bold">Downloads</h1>
+  <button class="btn preset-tonal" disabled={scanning} onclick={() => callApi(episodeLoadingIds, 'scan', '/scan', 'POST', async (res) => {
+    scanResult = await res.json();
+    if (scanResult && scanResult.found.length > 0) await invalidateAll();
+  })}>
+    <ScanSearchIcon size={16} />
+    {scanning ? 'Scanning…' : 'Scan for Existing Episodes'}
+  </button>
+</div>
+
 {#if error}
-  <div class="preset-tonal-error rounded p-3 text-sm mt-3">{error}</div>
+  <div class="preset-tonal-error rounded p-3 text-sm mb-3">{error}</div>
 {/if}
+{#if scanResult}
+  {@const foundCount = scanResult.found.length}
+  {@const trackedCount = scanResult.already_tracked.length}
+  {@const errorCount = scanResult.errors.length}
+  <div class="preset-tonal-success rounded p-3 text-sm mb-3 flex items-center justify-between">
+    <span>
+      Scan complete:
+      {foundCount} new episode{foundCount !== 1 ? 's' : ''} found
+      {#if trackedCount > 0}&nbsp;· {trackedCount} already tracked{/if}
+      {#if errorCount > 0}&nbsp;· {errorCount} error{errorCount !== 1 ? 's' : ''}{/if}
+    </span>
+    <button class="btn-icon btn-sm" onclick={() => scanResult = null}>✕</button>
+  </div>
+{/if}
+
 {#key page.url.search}
 <Tabs defaultValue={page.url.searchParams.get("tab") ?? "episodes"} onValueChange={(details) => history.replaceState(null, '', `?tab=${details.value}`)}>
   <Tabs.List>
@@ -137,7 +176,13 @@
         <td>{item.extended ? 'Yes' : 'No'}</td>
         <td>{item.status}</td>
         <td><DownloadProgress value={item.progress} status={item.status} /></td>
-        <td><a class="text-blue-500 hover:underline" href={`/downloads?tab=torrents&id=${item.torrent_infohash}`}>{item.torrent_name}</a></td>
+        <td>
+          {#if item.torrent_infohash}
+            <a class="text-blue-500 hover:underline" href={`/downloads?tab=torrents&id=${item.torrent_infohash}`}>{item.torrent_name}</a>
+          {:else}
+            —
+          {/if}
+        </td>
         <td>
           {#if EP_RESUMABLE.has(item.status)}
             <button class="btn-icon" disabled={isLoading} onclick={() => callApi(episodeLoadingIds, item.ep_id, `/episode/${item.ep_id}/resume`, 'POST')}><PlayIcon /></button>

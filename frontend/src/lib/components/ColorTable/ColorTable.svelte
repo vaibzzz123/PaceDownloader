@@ -33,6 +33,7 @@
         hover: "hover:bg-blue-500/30",
       },
       Error: { bg: "bg-red-500/20", hover: "hover:bg-red-500/30" },
+      Imported: { bg: "bg-green-500/20", hover: "hover:bg-green-500/30" },
     };
     return colors[status] ?? null;
   }

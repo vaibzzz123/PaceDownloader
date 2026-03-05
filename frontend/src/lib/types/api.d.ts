@@ -49,7 +49,8 @@ export interface paths {
         get: operations["get_season_season__season_num__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Season Route */
+        delete: operations["delete_season_route_season__season_num__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -208,6 +209,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/season/{season_num}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Download Season Route */
+        post: operations["download_season_route_season__season_num__download_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/season/{season_num}/pause": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Pause Season Route */
+        post: operations["pause_season_route_season__season_num__pause_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/season/{season_num}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Season Route */
+        post: operations["resume_season_route_season__season_num__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/torrent/{infohash}": {
         parameters: {
             query?: never;
@@ -243,15 +295,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/events": {
+    "/scan": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Sse Endpoint */
-        get: operations["sse_endpoint_events_get"];
+        get?: never;
+        put?: never;
+        /** Scan Existing Episodes Route */
+        post: operations["scan_existing_episodes_route_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/events/downloads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Downloads Sse */
+        get: operations["downloads_sse_events_downloads_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -279,9 +348,9 @@ export interface components {
             /** Progress */
             progress: number;
             /** Torrent Infohash */
-            torrent_infohash: string;
+            torrent_infohash: string | null;
             /** Torrent Name */
-            torrent_name: string;
+            torrent_name: string | null;
         };
         /** EpisodeResponse */
         EpisodeResponse: {
@@ -302,6 +371,28 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** ScanEpisodeInfo */
+        ScanEpisodeInfo: {
+            /** Ep Id */
+            ep_id: number;
+            /** Title */
+            title: string;
+            /** Season */
+            season: number;
+            /** Status */
+            status?: string | null;
+            /** Error */
+            error?: string | null;
+        };
+        /** ScanResultResponse */
+        ScanResultResponse: {
+            /** Found */
+            found: components["schemas"]["ScanEpisodeInfo"][];
+            /** Already Tracked */
+            already_tracked: components["schemas"]["ScanEpisodeInfo"][];
+            /** Errors */
+            errors: components["schemas"]["ScanEpisodeInfo"][];
         };
         /** SeasonResponse */
         SeasonResponse: {
@@ -456,6 +547,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SeasonResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_season_route_season__season_num__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                season_num: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -673,11 +793,13 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["TorrentDownloadResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -702,11 +824,106 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            204: {
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["TorrentDownloadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    download_season_route_season__season_num__download_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                season_num: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pause_season_route_season__season_num__pause_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                season_num: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_season_route_season__season_num__resume_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                season_num: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EpisodeResponse"][];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -801,7 +1018,27 @@ export interface operations {
             };
         };
     };
-    sse_endpoint_events_get: {
+    scan_existing_episodes_route_scan_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScanResultResponse"];
+                };
+            };
+        };
+    };
+    downloads_sse_events_downloads_get: {
         parameters: {
             query?: never;
             header?: never;

@@ -10,6 +10,7 @@
     Paused: { track: "bg-yellow-500/20", range: "bg-yellow-500" },
     "Download Complete": { track: "bg-blue-500/20", range: "bg-blue-500" },
     Error: { track: "bg-red-500/20", range: "bg-red-500" },
+    Imported: { track: "bg-green-500/20", range: "bg-green-500" },
   };
 
   const style = $derived(colors[status] ?? null);
