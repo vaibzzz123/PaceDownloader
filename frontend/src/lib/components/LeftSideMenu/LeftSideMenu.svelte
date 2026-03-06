@@ -30,9 +30,9 @@
     <span class="sr-only">Open menu</span>
   </Dialog.Trigger>
   {#if !isOnHomePage}
-    <button class="absolute top-4 left-14 btn-icon btn-icon-lg hover:preset-tonal" onclick={() => history.back()}>
+    <a class="absolute top-4 left-14 btn-icon btn-icon-lg hover:preset-tonal" href="/">
       <BackArrowIcon />
-    </button>
+    </a>
   {/if}
   <Portal>
     <Dialog.Backdrop class="fixed inset-0 z-50 bg-surface-50-950/50 backdrop-blur-sm {animBackdrop}" />

@@ -147,6 +147,7 @@ __pycache__/
 
 # SQLite database files
 *.sqlite3
+*.sqlite3.bak
 
 # pytest cov runtime file
 .coverage
