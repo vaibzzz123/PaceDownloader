@@ -7,6 +7,7 @@
   import SeasonInfo from '$lib/components/SeasonInfo/SeasonInfo.svelte';
   import ColorTable from '$lib/components/ColorTable/ColorTable.svelte';
   import SpoilerText from '$lib/components/SpoilerText/SpoilerText.svelte';
+  import DeleteDialog from '$lib/components/DeleteDialog/DeleteDialog.svelte';
   import DownloadIcon from "@lucide/svelte/icons/download";
   import PauseIcon from "@lucide/svelte/icons/pause";
   import PlayIcon from "@lucide/svelte/icons/play";
@@ -109,10 +110,14 @@
         for (const ep of episodes) if (RESUMABLE.has(ep.status)) ep.status = 'Downloading';
         callApi(null, `/season/${seasonNum}/resume`, 'POST');
       }}><PlayIcon size={18}/><span>Resume All</span></button>
-      <button class="btn preset-tonal-error rounded-xl text-sm" onclick={() => {
+      <DeleteDialog message="Delete all downloaded episodes for this season?" onConfirm={() => {
         for (const ep of episodes) if (DELETABLE.has(ep.status)) ep.status = 'Not Downloaded';
         callApi(null, `/season/${seasonNum}`, 'DELETE');
-      }}><Trash2Icon size={18}/><span>Delete All</span></button>
+      }}>
+        {#snippet button()}
+          <button class="btn preset-tonal-error rounded-xl text-sm"><Trash2Icon size={18}/><span>Delete All</span></button>
+        {/snippet}
+      </DeleteDialog>
     {/snippet}
   </SeasonInfo>
   {#if error}
@@ -141,7 +146,11 @@
         {:else}
           <button class="btn-icon" disabled={isLoading || !PAUSABLE.has(episode.status)} onclick={() => callApi(episode.ep_id, `/episode/${episode.ep_id}/pause`, 'POST')}><PauseIcon /></button>
         {/if}
-        <button class="btn-icon" disabled={isLoading || !DELETABLE.has(episode.status)} onclick={() => callApi(episode.ep_id, `/episode/${episode.ep_id}`, 'DELETE')}><Trash2Icon /></button>
+        <DeleteDialog message="Delete episode {episode.number} - {episode.title}?" onConfirm={() => callApi(episode.ep_id, `/episode/${episode.ep_id}`, 'DELETE')} disabled={isLoading || !DELETABLE.has(episode.status)}>
+          {#snippet button()}
+            <button class="btn-icon" disabled={isLoading || !DELETABLE.has(episode.status)}><Trash2Icon /></button>
+          {/snippet}
+        </DeleteDialog>
       </td>
     {/snippet}
   </ColorTable>
