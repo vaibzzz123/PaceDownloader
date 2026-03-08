@@ -88,8 +88,24 @@ def _initialize_media(media_data_location: Path):
         fetch_episode_metadata()
 
     media_data_location.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(METADATA_CONTENT_DIR, media_data_location, dirs_exist_ok=True)
-    logger.info("Copied metadata from '%s' to '%s'", METADATA_CONTENT_DIR, media_data_location)
+
+    copied = skipped = 0
+    for src_file in METADATA_CONTENT_DIR.rglob("*"):
+        if src_file.is_dir():
+            continue
+        dst_file = media_data_location / src_file.relative_to(METADATA_CONTENT_DIR)
+        dst_file.parent.mkdir(parents=True, exist_ok=True)
+        # Skip unchanged files — avoids re-copying hundreds of files over NFS on every metadata refresh
+        if dst_file.exists():
+            src_stat = src_file.stat()
+            dst_stat = dst_file.stat()
+            if src_stat.st_size == dst_stat.st_size and abs(src_stat.st_mtime - dst_stat.st_mtime) < 1:
+                skipped += 1
+                continue
+        shutil.copy2(src_file, dst_file)  # copy2 preserves mtime so the above check works next time
+        copied += 1
+
+    logger.info("Metadata sync: copied %d, skipped %d unchanged files to '%s'", copied, skipped, media_data_location)
 
 
 def _build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
