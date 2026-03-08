@@ -4,6 +4,7 @@ import shutil
 
 from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
+from qbittorrentapi import TorrentState
 from metadata import get_episodes
 from logging_config import get_logger
 from events import downloads_broadcaster
@@ -409,6 +410,7 @@ class DownloadManager:
             return {"found": found, "already_tracked": already_tracked, "errors": errors}
 
         prefer_extended = bool(settings["prefer_extended"]["value"])
+        all_episodes = get_episodes()
 
         # Fetch all qbt torrents once; files are fetched lazily per torrent and cached
         all_torrents = []
@@ -427,7 +429,7 @@ class DownloadManager:
                     torrent_files_cache[infohash] = []
             return torrent_files_cache[infohash]
 
-        for ep in get_episodes():
+        for ep in all_episodes:
             file_path = ep.get("file_location_media")
             if not file_path or not os.path.exists(file_path):
                 continue
@@ -504,6 +506,90 @@ class DownloadManager:
             except Exception as e:
                 logger.error("Scan: error processing episode %d: %s", ep["id"], e)
                 errors.append({**ep_info, "error": str(e)})
+
+        # Phase 2: recover in-progress torrents whose files aren't at file_location_media yet
+        if all_torrents:
+            episodes_by_crc32: dict[str, dict] = {}
+            for ep in all_episodes:
+                if ep.get("crc32"):
+                    episodes_by_crc32[ep["crc32"].lower()] = ep
+                if ep.get("crc32_extended"):
+                    episodes_by_crc32[ep["crc32_extended"].lower()] = ep
+
+            handled_ep_ids = {item["ep_id"] for item in found + already_tracked + errors}
+
+            def qbt_state_to_status(raw_state: str) -> str:
+                try:
+                    state = TorrentState(raw_state)
+                except ValueError:
+                    return "downloading"
+                if state.is_stopped:
+                    return "paused"
+                if state.is_checking or state in (TorrentState.QUEUED_DOWNLOAD, TorrentState.QUEUED_UPLOAD):
+                    return "pending"
+                return "downloading"
+
+            for torrent in all_torrents:
+                for f in get_files(torrent.hash):
+                    if not f.name or f.progress >= 1.0:
+                        continue
+
+                    matched_ep = None
+                    matched_crc32_lower = None
+                    for crc32_lower, ep in episodes_by_crc32.items():
+                        if crc32_lower in f.name.lower():
+                            matched_ep = ep
+                            matched_crc32_lower = crc32_lower
+                            break
+
+                    if not matched_ep:
+                        continue
+
+                    ep_id = matched_ep["id"]
+                    if ep_id in handled_ep_ids:
+                        continue
+
+                    ep_info = {"ep_id": ep_id, "title": matched_ep.get("title", ""), "season": matched_ep.get("season", 0)}
+
+                    existing = db.get_episode_download_by_ep_id(ep_id)
+                    if existing:
+                        already_tracked.append({**ep_info, "status": existing["status"]})
+                        handled_ep_ids.add(ep_id)
+                        continue
+
+                    try:
+                        is_extended = bool(
+                            matched_ep.get("crc32_extended") and
+                            matched_ep["crc32_extended"].lower() == matched_crc32_lower
+                        )
+                        actual_crc32 = matched_ep.get("crc32_extended" if is_extended else "crc32") or ""
+                        status = qbt_state_to_status(torrent.state)
+
+                        if not db.get_torrent_download(torrent.hash):
+                            db.create_torrent_download(torrent.hash, name=torrent.name, status=status)
+
+                        file_path_torrent = self._translate_file_path(
+                            os.path.join(torrent.save_path, f.name)
+                        )
+                        db.create_episode_download(
+                            ep_id=ep_id,
+                            crc32=actual_crc32,
+                            torrent_infohash=torrent.hash,
+                            prefer_extended=is_extended,
+                            file_path_torrent=file_path_torrent,
+                            file_path_disk=matched_ep.get("file_location_media"),
+                            status=status,
+                        )
+                        found.append({**ep_info, "status": status})
+                        handled_ep_ids.add(ep_id)
+                        logger.info(
+                            "Scan: episode %d recovered from in-progress torrent %s (%s)",
+                            ep_id, torrent.hash, status,
+                        )
+                    except Exception as e:
+                        errors.append({**ep_info, "error": str(e)})
+                        handled_ep_ids.add(ep_id)
+                        logger.error("Scan: error processing in-progress episode %d: %s", ep_id, e)
 
         logger.info(
             "Scan complete: found=%d, already_tracked=%d, errors=%d",
