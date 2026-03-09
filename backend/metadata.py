@@ -426,8 +426,8 @@ def _build_episode_mapping(media_location: Path) -> tuple[list[dict], list[dict]
 
 
 def _save_metadata_mapping(mapping: list[dict], media_location: Path):
-    """Save the episode metadata mapping to a JSON file in the media location."""
-    output_path = media_location / "constructed_metadata.json"
+    """Save the episode metadata mapping to a JSON file in the app data directory."""
+    output_path = Path("data/constructed_metadata.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(mapping, f, indent=2)

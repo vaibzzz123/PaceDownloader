@@ -7,13 +7,13 @@ Main things left to implement for MVP:
 - settings page and API endpoint for settings (done!)
 - If episode files are already downloaded in the right location, create a download record for them (done!)
 - Scan existing episodes for torrents in flight on qbt, and create records for those (done!)
+- Add a confirm delete dialog on the frontend for delete operations (done!)
 - Copying metadata only for stuff user has downloaded/wants, not everything
-- Add a confirm delete dialog on the frontend for delete operations
 - initial setup wizard
-- Changes in file names and updated episodes (ex redone eps by One Pace team, their crc32 might change, need to think about how to approach this)
 - Dockerize the full app
 
 Future features:
 - If user changes torrent status from qbt instead of the app, make sure the app is updated to reflect that
+- Changes in file names and updated episodes (ex redone eps by One Pace team, their crc32 might change, need to think about how to approach this)
 - Maybe authentication?
 - Proper testing
