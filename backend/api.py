@@ -1,9 +1,10 @@
 import asyncio
 import json
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest, ScanResultResponse
-from metadata import get_seasons, get_episodes
+from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest, ScanResultResponse, MetadataSyncResponse
+from metadata import get_seasons, get_episodes, refresh_build_and_sync_media
 from dependencies import get_download_manager
 from download_manager import DownloadManager
 from events import downloads_broadcaster
@@ -367,6 +368,22 @@ async def scan_existing_episodes_route(dm: DownloadManager = Depends(get_downloa
     if result["found"]:
         downloads_broadcaster.publish({"type": "scan_complete"})
     return ScanResultResponse(**result)
+
+
+@router.post("/metadata/sync", response_model=MetadataSyncResponse)
+async def sync_metadata_route():
+    settings = db.get_settings()
+    media_location_value = settings["media_data_location"]["value"] if settings else ""
+    if not media_location_value:
+        raise HTTPException(status_code=422, detail="Media data location is not configured")
+
+    result = await asyncio.to_thread(
+        refresh_build_and_sync_media,
+        Path(media_location_value),
+        False,
+        True,
+    )
+    return MetadataSyncResponse(**result)
 
 
 @router.get("/events/downloads")

@@ -43,6 +43,15 @@ class ScanResultResponse(BaseModel):
     errors: list[ScanEpisodeInfo]
 
 
+class MetadataSyncResponse(BaseModel):
+    copied_files: int
+    removed_files: int
+    removed_directories: int
+    skipped_files: int
+    active_seasons: list[int]
+    enabled_backdrops: list[str]
+
+
 class TorrentDownloadResponse(BaseModel):
     infohash: str
     name: str
