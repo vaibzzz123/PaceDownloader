@@ -2,7 +2,9 @@
 
 import json
 import re
+from email.utils import parsedate_to_datetime
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -16,9 +18,17 @@ logger = get_logger(__name__)
 
 GITHUB_REPO_URL = "https://github.com/tissla/one-pace-jellyfin"
 GOOGLE_SHEET_ID = "1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA"
+ONEPACE_RELEASES_RSS_URL = "https://onepace.net/en/releases/rss.xml"
 
 METADATA_DIR = Path("data/eps-metadata")
 SHEETS_DIR = Path("data/sheets")
+RELEASES_DIR = Path("data/releases")
+RELEASES_JSON_PATH = RELEASES_DIR / "onepace_releases.json"
+
+RSS_NS = {
+    "rss": "https://www.rssboard.org/rss-specification",
+    "torrent": "http://xmlns.ezrss.it/0.1/",
+}
 
 
 def _get_session_with_retries() -> requests.Session:
@@ -34,6 +44,74 @@ def _get_session_with_retries() -> requests.Session:
     session.mount("https://", adapter)
     session.mount("http://", adapter)
     return session
+
+
+def _normalize_release_title(title: str | None) -> str:
+    """Normalize release titles for later lookup without changing displayed text."""
+    if not title:
+        return ""
+    normalized = re.sub(r"\s+", " ", title).strip().lower()
+    return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+
+
+def _extract_nyaa_id(*urls: str | None) -> int | None:
+    """Extract a nyaa.si numeric ID from known view/download URL shapes."""
+    for url in urls:
+        if not url:
+            continue
+        match = re.search(r"nyaa\.si/(?:view|download)/(\d+)", url)
+        if match:
+            return int(match.group(1))
+    return None
+
+
+def _parse_publication_date(pub_date: str | None) -> str | None:
+    """Return the ISO date parsed from an RSS pubDate value."""
+    if not pub_date:
+        return None
+    parsed = parsedate_to_datetime(pub_date)
+    return parsed.date().isoformat()
+
+
+def parse_onepace_releases_rss(xml_text: str) -> list[dict]:
+    """Parse One Pace releases RSS into JSON-serializable release records."""
+    root = ET.fromstring(xml_text)
+    releases = []
+
+    for item in root.findall(".//rss:item", RSS_NS):
+        title = item.findtext("rss:title", default="", namespaces=RSS_NS).strip()
+        pub_date_raw = item.findtext("rss:pubDate", default="", namespaces=RSS_NS).strip()
+        publication_date = _parse_publication_date(pub_date_raw)
+        categories = [
+            category.text.strip()
+            for category in item.findall("rss:category", RSS_NS)
+            if category.text and category.text.strip()
+        ]
+
+        link = item.findtext("rss:link", default="", namespaces=RSS_NS).strip() or None
+        enclosure = item.find("rss:enclosure", RSS_NS)
+        torrent_url = enclosure.get("url") if enclosure is not None else None
+        info_hash = item.findtext("torrent:infoHash", default="", namespaces=RSS_NS).strip()
+        magnet_uri = item.findtext("torrent:magnetURI", default="", namespaces=RSS_NS).strip()
+        torrent_file_name = item.findtext("torrent:fileName", default="", namespaces=RSS_NS).strip()
+
+        nyaa_url = link if link and "nyaa.si" in link else None
+        nyaa_id = _extract_nyaa_id(nyaa_url, torrent_url)
+
+        releases.append({
+            "title": title,
+            "normalized_title": _normalize_release_title(title),
+            "publication_date": publication_date,
+            "categories": categories,
+            "nyaa_url": nyaa_url,
+            "nyaa_id": nyaa_id,
+            "torrent_url": torrent_url,
+            "magnet_uri": magnet_uri,
+            "info_hash": info_hash.lower() if info_hash else None,
+            "torrent_file_name": torrent_file_name,
+        })
+
+    return releases
 
 
 def fetch_episode_metadata():
@@ -160,3 +238,20 @@ def fetch_onepace_sheet():
             json.dump(rows, f, indent=2, default=str)
 
         logger.info("Saved %d rows to %s", len(rows), output_path)
+
+
+def fetch_onepace_releases():
+    """Download the One Pace releases RSS feed and save parsed releases as JSON."""
+    logger.debug("Fetching One Pace releases RSS: %s", ONEPACE_RELEASES_RSS_URL)
+
+    session = _get_session_with_retries()
+    response = session.get(ONEPACE_RELEASES_RSS_URL, timeout=60)
+    response.raise_for_status()
+
+    releases = parse_onepace_releases_rss(response.text)
+
+    RELEASES_DIR.mkdir(parents=True, exist_ok=True)
+    with open(RELEASES_JSON_PATH, "w") as f:
+        json.dump(releases, f, indent=2)
+
+    logger.info("Saved %d One Pace releases to %s", len(releases), RELEASES_JSON_PATH)

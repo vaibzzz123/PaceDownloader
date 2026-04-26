@@ -12,7 +12,9 @@ import defusedxml.ElementTree as ET
 from data_sources import (
     fetch_episode_metadata,
     fetch_onepace_sheet,
+    fetch_onepace_releases,
     METADATA_DIR,
+    RELEASES_DIR,
     SHEETS_DIR,
 )
 from logging_config import get_logger
@@ -75,11 +77,22 @@ def _is_sheets_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
     return age_hours < max_age_hours
 
 
+def _is_releases_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
+    if not RELEASES_DIR.exists():
+        return False
+    json_files = list(RELEASES_DIR.glob("*.json"))
+    if not json_files:
+        return False
+    newest = max(json_files, key=lambda f: f.stat().st_mtime)
+    age_hours = (time.time() - newest.stat().st_mtime) / 3600
+    return age_hours < max_age_hours
+
+
 def _refresh_data(
     force: bool = False,
     max_age_hours: int = DEFAULT_MAX_AGE_HOURS,
 ):
-    """Refresh episode metadata and sheets data if stale.
+    """Refresh episode metadata, sheets data, and release feed data if stale.
 
     Args:
         force: Force refresh regardless of age.
@@ -94,6 +107,11 @@ def _refresh_data(
         fetch_onepace_sheet()
     else:
         logger.info("Sheets data is fresh, skipping refresh")
+
+    if force or not _is_releases_fresh(max_age_hours):
+        fetch_onepace_releases()
+    else:
+        logger.info("Release feed data is fresh, skipping refresh")
 
 
 def _copy_file_if_needed(src_file: Path, dst_file: Path) -> str:

@@ -5,7 +5,7 @@ from qbittorrent import QbittorrentClient
 @patch("qbittorrent.get_settings")
 def test_qbittorrent_client_initialization(mock_get_settings):
     mock_get_settings.return_value = {
-        "qbt_hostname": {"value": "http://localhost:8080"},
+        "qbt_hostname": {"value": "http://qbittorrent.test:18080"},
         "qbt_username": {"value": "admin"},
         "qbt_password": {"value": "adminadmin"},
         "qbt_path_local": {"value": ""},
@@ -21,8 +21,9 @@ def test_qbittorrent_client_initialization(mock_get_settings):
         qb_client = QbittorrentClient()
 
         mock_client_class.assert_called_once_with(
-            host="http://localhost:8080",
+            host="http://qbittorrent.test:18080",
             username="admin",
             password="adminadmin",
+            REQUESTS_ARGS={"timeout": 10},
         )
         mock_client_instance.auth_log_in.assert_called_once()
