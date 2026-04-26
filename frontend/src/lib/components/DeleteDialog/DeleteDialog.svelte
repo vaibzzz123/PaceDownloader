@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { XIcon } from '@lucide/svelte';
+  import XIcon from '@lucide/svelte/icons/x';
   import { Dialog, Portal } from '@skeletonlabs/skeleton-svelte';
 
   let { button, message = 'Are you sure? This cannot be undone.', onConfirm, disabled = false }: {
