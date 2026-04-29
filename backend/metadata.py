@@ -6,6 +6,7 @@ import re
 import shutil
 import time
 from collections import defaultdict
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 import defusedxml.ElementTree as ET
@@ -407,6 +408,47 @@ def _parse_episode_number(ep_value: str) -> int:
     return 1
 
 
+def _get_sheet_value(row: dict | None, column_name: str) -> Any:
+    if not row:
+        return None
+    for key, value in row.items():
+        if key is not None and str(key).strip() == column_name:
+            return value
+    return None
+
+
+def _extract_crc32_cell(value: Any) -> tuple[str | None, str | None]:
+    """Return (crc32, link) from old hyperlink cells or current plain CRC strings."""
+    if isinstance(value, dict):
+        text = value.get("text")
+        link = value.get("link")
+        return (str(text).strip() if text else None, link)
+    if isinstance(value, str):
+        stripped = value.strip()
+        return (stripped or None, None)
+    return None, None
+
+
+def _normalize_sheet_release_date(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        for fmt in ("%Y.%m.%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(stripped, fmt).date().isoformat()
+            except ValueError:
+                continue
+        return stripped
+    return str(value)
+
+
 def _find_arc_json_file(sheets_dir: Path, json_filename: str) -> Path | None:
     """
     Find the JSON file for an arc, handling naming mismatches.
@@ -468,11 +510,7 @@ def _load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tu
 
         for row in episodes:
             # Find the "One Pace Episode" column (may have leading space)
-            ep_col_value = None
-            for key in row:
-                if key is not None and key.strip() == "One Pace Episode":
-                    ep_col_value = row[key]
-                    break
+            ep_col_value = _get_sheet_value(row, "One Pace Episode")
 
             if ep_col_value is None or not isinstance(ep_col_value, str):
                 continue
@@ -609,17 +647,20 @@ def _build_episode_mapping(media_location: Path | None) -> tuple[list[dict], lis
         crc32 = None
         torrent_link_extended = None
         crc32_extended = None
+        sheet_episode_name = None
+        release_date = None
 
         if sheet_row:
-            mkv_crc32 = sheet_row.get("MKV CRC32")
-            if isinstance(mkv_crc32, dict):
-                torrent_link = mkv_crc32.get("link")
-                crc32 = mkv_crc32.get("text")
+            sheet_episode_name_raw = _get_sheet_value(sheet_row, "One Pace Episode")
+            if isinstance(sheet_episode_name_raw, str):
+                sheet_episode_name = sheet_episode_name_raw.strip()
 
-            mkv_crc32_ext = sheet_row.get("MKV CRC32 (Extended)")
-            if isinstance(mkv_crc32_ext, dict):
-                torrent_link_extended = mkv_crc32_ext.get("link")
-                crc32_extended = mkv_crc32_ext.get("text")
+            release_date = _normalize_sheet_release_date(_get_sheet_value(sheet_row, "Release Date"))
+
+            crc32, torrent_link = _extract_crc32_cell(_get_sheet_value(sheet_row, "MKV CRC32"))
+            crc32_extended, torrent_link_extended = _extract_crc32_cell(
+                _get_sheet_value(sheet_row, "MKV CRC32 (Extended)")
+            )
 
         # Extract and normalise duration from sheet row ("hh:mm:ss" → "mm:ss" when hh is "00")
         duration = None
@@ -643,6 +684,8 @@ def _build_episode_mapping(media_location: Path | None) -> tuple[list[dict], lis
             "ep_number": ep_num,
             "duration": duration,
             "file_location_media": file_location,
+            "sheet_episode_name": sheet_episode_name,
+            "release_date": release_date,
             "torrent_link": torrent_link,
             "crc32": crc32,
             "torrent_link_extended": torrent_link_extended,
