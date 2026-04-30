@@ -111,11 +111,11 @@ This translates `/downloads/file.mkv` (qBittorrent's view) to `/mnt/media/file.m
 
 ### Data Flow
 
-1. **Metadata**: On startup, the backend clones [`tissla/one-pace-jellyfin`](https://github.com/tissla/one-pace-jellyfin) for NFO metadata and downloads a Google Sheets export of the official [One Pace Episode Guide](https://docs.google.com/spreadsheets/d/1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA/edit?gid=0#gid=0). These are joined to create a unified episode list and internal metadata for the application.
+1. **Metadata**: On startup, the backend clones [`tissla/one-pace-jellyfin`](https://github.com/tissla/one-pace-jellyfin) for NFO metadata, downloads a Google Sheets export of the official [One Pace Episode Guide](https://docs.google.com/spreadsheets/d/1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA/edit?gid=0#gid=0), and fetches the One Pace releases RSS feed. The NFO files and spreadsheet rows are joined into the app's episode list, while parsed release records are cached under `backend/data/releases/` for torrent resolution.
 
 2. **Browsing**: The SvelteKit frontend fetches season/episode data from the FastAPI backend and displays it with posters, titles, and descriptions.
 
-3. **Downloading**: When you request an episode download, the backend looks up the torrent on Nyaa.si, adds it to qBittorrent (setting file priorities so only the requested episode downloads), and polls for completion. Once done, the file is hardlinked (or copied) to the Jellyfin media location.
+3. **Downloading**: When you request an episode download, the backend uses the spreadsheet episode name, release date, and CRC32 to find a matching individual or batch release from the cached One Pace release feed. Candidate releases are verified against Nyaa.si file listings by CRC32 before their magnet links are added to qBittorrent. qBittorrent file priorities are set so only the requested episode downloads, and once done, the file is hardlinked (or copied) to the Jellyfin media location.
 
 ### Backend Structure
 
@@ -128,8 +128,9 @@ backend/
 ├── metadata.py          - Episode metadata parsing and joining
 ├── download_manager.py  - Download orchestration + polling
 ├── qbittorrent.py       - qBittorrent client wrapper
-├── data_sources.py      - Git clone + Sheets download
-├── nyaa_utils.py        - Nyaa.si torrent lookup
+├── data_sources.py      - Git clone + Sheets/release feed downloads
+├── release_resolver.py  - Release feed torrent matching + CRC verification
+├── nyaa_utils.py        - Nyaa.si helper utilities
 └── logging_config.py    - Logging setup
 ```
 
