@@ -2,15 +2,21 @@ import asyncio
 import os
 import shutil
 
-from nyaa_utils import get_nyaa_resource_for_episode
 from qbittorrent import QbittorrentClient
 from qbittorrentapi import TorrentState
 from metadata import get_episodes
+from release_resolver import resolve_episode_release
 from logging_config import get_logger
 from events import downloads_broadcaster
 import db
 
 logger = get_logger(__name__)
+
+
+def _crc32_matches(expected: str | None, actual: str) -> bool:
+    if expected is None:
+        return False
+    return expected.strip().lower() == actual.strip().lower()
 
 
 class DownloadManager:
@@ -37,21 +43,16 @@ class DownloadManager:
         episode_metadata = next(ep for ep in get_episodes() if ep["id"] == episode_id)
 
         logger.info("Starting download for episode ID: %d", episode_id)
-        nyaa_resource = get_nyaa_resource_for_episode(episode_metadata)
-        if not nyaa_resource or not nyaa_resource.info_hash:
-            raise ValueError(f"Could not find nyaa resource for episode ID {episode_id}")
-
-        infohash = nyaa_resource.info_hash
-        if prefer_extended:
-            crc32 = episode_metadata.get("crc32_extended") or episode_metadata["crc32"]
-        else:
-            crc32 = episode_metadata["crc32"]
+        resolved_release = resolve_episode_release(episode_metadata, prefer_extended=prefer_extended)
+        infohash = resolved_release.info_hash
+        crc32 = resolved_release.crc32
+        is_extended = _crc32_matches(episode_metadata.get("crc32_extended"), crc32)
 
         torrent_download = db.get_torrent_download(infohash)
         if torrent_download:
             self._add_episode_to_existing_torrent(infohash, crc32)
         else:
-            self._create_torrent_for_episode(nyaa_resource.magnet_url, infohash, crc32)
+            self._create_torrent_for_episode(resolved_release.magnet_uri, infohash, crc32)
 
         episode_file = self.qbt_client.get_file_by_crc32(infohash, crc32)
         file_path_torrent = None
@@ -63,7 +64,7 @@ class DownloadManager:
             ep_id=episode_id,
             torrent_infohash=infohash,
             crc32=crc32,
-            prefer_extended=prefer_extended,
+            prefer_extended=is_extended,
             file_path_torrent=file_path_torrent,
             file_path_disk=episode_metadata["file_location_media"],
             status="downloading",
