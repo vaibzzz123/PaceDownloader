@@ -194,13 +194,15 @@ def _find_ranked_individual_release_candidates(
     releases: Sequence[OnePaceRelease],
     crc_field: CrcField,
 ) -> list[OnePaceRelease]:
-    episode_title = _episode_release_title(episode)
+    episode_titles = _episode_individual_title_candidates(episode)
     wants_extended = crc_field == "crc32_extended"
-    matches = [
-        release
-        for release in releases
-        if _is_individual_title_match(release, episode_title, wants_extended=wants_extended)
-    ]
+    matches: list[OnePaceRelease] = []
+    for release in releases:
+        for episode_title in episode_titles:
+            if _is_individual_title_match(release, episode_title, wants_extended=wants_extended):
+                matches.append(release)
+                break
+
     return sorted(matches, key=lambda release: _release_candidate_date_rank(episode, release))
 
 
@@ -208,13 +210,15 @@ def _find_ranked_batch_release_candidates(
     episode: EpisodeReleaseMetadata,
     releases: Sequence[OnePaceRelease],
 ) -> list[OnePaceRelease]:
-    batch_title = _episode_batch_title(episode)
-    individual_title = _episode_release_title(episode)
-    matches = [
-        release
-        for release in releases
-        if _is_batch_title_match(release, batch_title, individual_title)
-    ]
+    batch_titles = _episode_batch_title_candidates(episode)
+    individual_titles = _episode_individual_title_candidates(episode)
+    matches: list[OnePaceRelease] = []
+    for release in releases:
+        for batch_title in batch_titles:
+            if _is_batch_title_match(release, batch_title, individual_titles):
+                matches.append(release)
+                break
+
     return sorted(matches, key=lambda release: _release_candidate_date_rank(episode, release))
 
 
@@ -295,12 +299,12 @@ def _is_individual_title_match(
 def _is_batch_title_match(
     release: OnePaceRelease,
     batch_title: str,
-    individual_title: str,
+    individual_titles: Sequence[str],
 ) -> bool:
     release_title = _release_normalized_title(release)
     if not release_title or not batch_title:
         return False
-    if release_title == individual_title:
+    if release_title in individual_titles:
         return False
     if release_title == batch_title:
         return True
@@ -327,17 +331,60 @@ def _release_date_distance_days(episode: EpisodeReleaseMetadata, release: OnePac
     return (release_date - episode_date).days
 
 
-def _episode_release_title(episode: EpisodeReleaseMetadata) -> str:
-    return normalize_release_lookup_text(
-        episode.get("sheet_episode_name")
-        or episode.get("release_title")
-        or episode.get("ep_name")
-        or episode.get("title")
-    )
+def _episode_individual_title_candidates(episode: EpisodeReleaseMetadata) -> list[str]:
+    titles: list[str] = []
+    for title in _episode_title_values(episode):
+        normalized_title = normalize_release_lookup_text(title)
+        _append_unique_title(titles, normalized_title)
+        if normalized_title and not _looks_like_numbered_release(normalized_title):
+            episode_number = _episode_number_suffix(episode)
+            if episode_number is not None:
+                _append_unique_title(titles, f"{normalized_title} {episode_number}")
+
+    return titles
 
 
-def _episode_batch_title(episode: EpisodeReleaseMetadata) -> str:
-    title = _episode_release_title(episode)
+def _episode_title_values(episode: EpisodeReleaseMetadata) -> list[str]:
+    values: list[str] = []
+    for value in (
+        episode.get("sheet_episode_name"),
+        episode.get("release_title"),
+        episode.get("title"),
+        _title_from_episode_file_name(episode.get("ep_name")),
+        episode.get("ep_name"),
+    ):
+        if isinstance(value, str) and value.strip():
+            values.append(value)
+    return values
+
+
+# Gets title by removing everything before the final '-' and using that as a title candidate
+def _title_from_episode_file_name(ep_name: str | None) -> str | None:
+    if not isinstance(ep_name, str) or not ep_name.strip():
+        return None
+    return ep_name.rsplit(" - ", 1)[-1].strip()
+
+
+def _append_unique_title(titles: list[str], title: str) -> None:
+    if title and title not in titles:
+        titles.append(title)
+
+
+def _episode_number_suffix(episode: EpisodeReleaseMetadata) -> str | None:
+    ep_number = episode.get("ep_number")
+    if not isinstance(ep_number, int):
+        return None
+    return f"{ep_number:02d}"
+
+
+def _episode_batch_title_candidates(episode: EpisodeReleaseMetadata) -> list[str]:
+    titles: list[str] = []
+    for title in _episode_individual_title_candidates(episode):
+        _append_unique_title(titles, _remove_trailing_episode_number(title))
+    return titles
+
+
+def _remove_trailing_episode_number(title: str) -> str:
     words = title.split()
     while words and words[-1] in {"extended", "cut"}:
         words.pop()

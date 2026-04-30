@@ -138,6 +138,53 @@ def test_resolver_falls_back_to_batch_release_after_removing_episode_number():
     assert nyaa_client.requested_ids == [-41]
 
 
+def test_resolver_matches_single_episode_arc_when_sheet_name_has_no_episode_number():
+    episode = _episode(
+        ep_name="Fixture Show - S07E01 - Side Story",
+        ep_number=1,
+        sheet_episode_name="Side Story",
+        release_date="2026-02-21",
+        crc32="1177A2B6",
+    )
+    releases = [
+        _release("Side Story 01", -70, publication_date="2023-10-06"),
+        _release("Side Story 01", -71, publication_date="2026-02-21"),
+    ]
+    nyaa_client = FakeNyaaClient({
+        -70: _resource("E75794DB", info_hash="7" * 40, magnet_url="magnet:old"),
+        -71: _resource("1177A2B6", info_hash="8" * 40, magnet_url="magnet:current"),
+    })
+
+    resolved = resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
+
+    assert resolved.nyaa_id == -71
+    assert resolved.magnet_uri == "magnet:current"
+    assert nyaa_client.requested_ids == [-71]
+
+
+def test_resolver_uses_nfo_title_when_sheet_name_is_shorter_than_release_title():
+    episode = _episode(
+        ep_name="Fixture Show - S25E01 - A Longer Special Episode Name",
+        ep_number=1,
+        title="A Longer Special Episode Name",
+        sheet_episode_name="Special Episode",
+        release_date="2024-03-29",
+        crc32="2BC41092",
+    )
+    releases = [
+        _release("A Longer Special Episode Name 01", -80, publication_date="2024-03-29"),
+    ]
+    nyaa_client = FakeNyaaClient({
+        -80: _resource("2BC41092", info_hash="9" * 40, magnet_url="magnet:straw-hats"),
+    })
+
+    resolved = resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
+
+    assert resolved.nyaa_id == -80
+    assert resolved.magnet_uri == "magnet:straw-hats"
+    assert nyaa_client.requested_ids == [-80]
+
+
 def test_resolver_prefers_extended_crc32_when_requested():
     episode = _episode(crc32="11111111", crc32_extended="22222222")
     releases = [
