@@ -203,6 +203,124 @@ def test_resolver_prefers_extended_crc32_when_requested():
     assert resolved.magnet_uri == "magnet:extended"
 
 
+def test_resolver_uses_crc_override_after_sheet_crc_fails_when_release_date_matches():
+    episode = _episode(
+        season=3,
+        ep_number=2,
+        sheet_episode_name="Fixture Arc 02",
+        crc32="11111111",
+    )
+    releases = [
+        _release("Fixture Arc 02", -90),
+    ]
+    nyaa_client = FakeNyaaClient({
+        -90: _resource("ABCDEF12", info_hash="a" * 40, magnet_url="magnet:override"),
+    })
+    overrides = [
+        {
+            "season": 3,
+            "ep_number": 2,
+            "release_date": "2026-04-22",
+            "crc32": "ABCDEF12",
+            "note": "Fixture correction",
+        },
+    ]
+
+    resolved = resolve_episode_release(
+        episode,
+        releases,
+        nyaa_client=nyaa_client,
+        crc32_overrides=overrides,
+    )
+
+    assert resolved.nyaa_id == -90
+    assert resolved.crc32 == "ABCDEF12"
+    assert resolved.magnet_uri == "magnet:override"
+    assert resolved.crc32_override_note == "Fixture correction"
+    assert nyaa_client.requested_ids == [-90]
+
+
+def test_resolver_skips_crc_override_when_release_date_does_not_match():
+    episode = _episode(
+        season=3,
+        ep_number=2,
+        sheet_episode_name="Fixture Arc 02",
+        crc32="11111111",
+    )
+    releases = [
+        _release("Fixture Arc 02", -91, publication_date="2026-04-20"),
+    ]
+    nyaa_client = FakeNyaaClient({
+        -91: _resource("ABCDEF12"),
+    })
+    overrides = [
+        {
+            "season": 3,
+            "ep_number": 2,
+            "release_date": "2026-04-22",
+            "crc32": "ABCDEF12",
+            "note": "Fixture correction",
+        },
+    ]
+
+    with pytest.raises(ReleaseResolutionError):
+        resolve_episode_release(
+            episode,
+            releases,
+            nyaa_client=nyaa_client,
+            crc32_overrides=overrides,
+        )
+
+
+def test_resolver_can_verify_crc_override_from_release_feed_file_name_without_nyaa_id():
+    episode = _episode(
+        season=4,
+        ep_number=1,
+        sheet_episode_name="Fixture Special 01",
+        crc32="11111111",
+    )
+    releases = [
+        {
+            "title": "Fixture Special 01",
+            "normalized_title": "",
+            "publication_date": "2026-04-22",
+            "categories": [],
+            "nyaa_url": None,
+            "nyaa_id": None,
+            "torrent_url": None,
+            "magnet_uri": "magnet:feed-only",
+            "info_hash": "b" * 40,
+            "torrent_file_name": "Fixture Special 01 [ABCDEF12].mkv.torrent",
+        },
+    ]
+    nyaa_client = FakeNyaaClient({})
+    overrides = [
+        {
+            "season": 4,
+            "ep_number": 1,
+            "release_date": "2026-04-22",
+            "crc32": "ABCDEF12",
+            "note": "Fixture feed correction",
+        },
+    ]
+
+    resolved = resolve_episode_release(
+        episode,
+        releases,
+        nyaa_client=nyaa_client,
+        resolve_info_hash_to_id_func=lambda _info_hash: None,
+        crc32_overrides=overrides,
+    )
+
+    assert resolved.nyaa_id is None
+    assert resolved.nyaa_resource is None
+    assert resolved.crc32 == "ABCDEF12"
+    assert resolved.info_hash == "b" * 40
+    assert resolved.magnet_uri == "magnet:feed-only"
+    assert resolved.crc32_override_note == "Fixture feed correction"
+    assert nyaa_client.requested_ids == []
+
+
 def test_resolver_raises_when_no_candidate_contains_crc32():
     episode = _episode(crc32="DEADBEEF")
     releases = [_release("Fixture Arc 01", -60)]

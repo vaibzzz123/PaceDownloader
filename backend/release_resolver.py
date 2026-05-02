@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Literal, Protocol, TypedDict, cast
+from typing import Protocol, TypedDict, cast
 
 from data_sources import RELEASES_JSON_PATH
 from logging_config import get_logger
@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 
 DATE_MATCH_WINDOW_DAYS = 1
 NO_DATE_DISTANCE = 999_999
-CrcField = Literal["crc32", "crc32_extended"]
+CRC32_OVERRIDES_JSON_PATH = Path(__file__).parent / "release_crc32_overrides.json"
 NyaaIdResolver = Callable[[str], int | None]
 
 
@@ -90,14 +90,26 @@ class ReleaseResolutionError(ValueError):
 
 @dataclass(frozen=True)
 class ResolvedRelease:
-    """A release whose Nyaa file listing contains the requested episode CRC32."""
+    """A release whose Nyaa listing or feed file name contains the requested CRC32."""
 
     release: OnePaceRelease
-    nyaa_resource: NyaaResource
-    nyaa_id: int
+    nyaa_resource: NyaaResource | None
+    nyaa_id: int | None
     crc32: str
     info_hash: str
     magnet_uri: str
+    crc32_override_note: str | None = None
+
+
+class EpisodeCrc32Override(TypedDict, total=False):
+    """CRC correction used only after the spreadsheet CRCs fail verification."""
+
+    season: int
+    ep_number: int
+    release_date: str
+    crc32: str | None
+    crc32_extended: str | None
+    note: str | None
 
 
 def load_onepace_releases(path: Path = RELEASES_JSON_PATH) -> list[OnePaceRelease]:
@@ -112,6 +124,21 @@ def load_onepace_releases(path: Path = RELEASES_JSON_PATH) -> list[OnePaceReleas
         raise ReleaseResolutionError(f"One Pace release feed cache is invalid: {path}")
 
     return cast(list[OnePaceRelease], releases)
+
+
+def load_crc32_overrides(path: Path = CRC32_OVERRIDES_JSON_PATH) -> list[EpisodeCrc32Override]:
+    """Load metadata-only CRC overrides used after normal CRC verification fails."""
+    if not path.exists():
+        return []
+
+    with open(path) as f:
+        payload = json.load(f)
+
+    overrides = payload.get("episode_crc32_overrides") if isinstance(payload, dict) else None
+    if not isinstance(overrides, list) or not all(isinstance(override, dict) for override in overrides):
+        raise ReleaseResolutionError(f"CRC32 override file is invalid: {path}")
+
+    return cast(list[EpisodeCrc32Override], overrides)
 
 
 def normalize_release_lookup_text(value: str | None) -> str:
@@ -129,16 +156,22 @@ def resolve_episode_release(
     prefer_extended: bool = True,
     nyaa_client: NyaaResourceClient | None = None,
     resolve_info_hash_to_id_func: NyaaIdResolver = resolve_info_hash_to_id,
+    crc32_overrides: Sequence[EpisodeCrc32Override] | None = None,
 ) -> ResolvedRelease:
     """Find a release for an episode and verify it contains the requested CRC32."""
     release_records = releases if releases is not None else load_onepace_releases()
+    override_records = crc32_overrides if crc32_overrides is not None else load_crc32_overrides()
     client = nyaa_client or NyaaSiClient()
     resource_cache: dict[int, NyaaResource] = {}
 
-    for crc_field, crc32 in _episode_crc_options(episode, prefer_extended):
+    for is_extended, crc32 in _episode_crc_options(episode, prefer_extended):
         candidates = [
             # Only does a soft check based on the parsed RSS data titles, etc.
-            *_find_ranked_individual_release_candidates(episode, release_records, crc_field),
+            *_find_ranked_individual_release_candidates(
+                episode,
+                release_records,
+                is_extended=is_extended,
+            ),
             *_find_ranked_batch_release_candidates(episode, release_records),
         ]
 
@@ -154,6 +187,42 @@ def resolve_episode_release(
             if resolved is not None:
                 return resolved
 
+    for is_extended, crc32, override in _episode_override_crc_options(episode, override_records, prefer_extended):
+        candidates = [
+            *_find_ranked_individual_release_candidates(
+                episode,
+                release_records,
+                is_extended=is_extended,
+            ),
+            *_find_ranked_batch_release_candidates(episode, release_records),
+        ]
+
+        for release in candidates:
+            if not _release_date_matches_expected_date(
+                release=release,
+                expected_date=override.get("release_date"),
+            ):
+                continue
+
+            resolved = _verify_release_candidate(
+                release=release,
+                crc32=crc32,
+                nyaa_client=client,
+                resource_cache=resource_cache,
+                resolve_info_hash_to_id_func=resolve_info_hash_to_id_func,
+                crc32_override_note=override.get("note"),
+            )
+            if resolved is not None:
+                return resolved
+
+            resolved = _verify_release_feed_file_name_candidate(
+                release=release,
+                crc32=crc32,
+                crc32_override_note=override.get("note"),
+            )
+            if resolved is not None:
+                return resolved
+
     raise ReleaseResolutionError(
         f"Could not find a One Pace release containing CRC32 for {episode.get('ep_name') or episode.get('sheet_episode_name')}"
     )
@@ -161,45 +230,101 @@ def resolve_episode_release(
 
 def release_contains_crc32(resource: NyaaResource, crc32: str | None) -> bool:
     """Return True when a Nyaa resource file tree contains the target CRC32."""
+    return _file_names_contain_crc32(_iter_nyaa_resource_file_names(resource), crc32)
+
+
+def _file_names_contain_crc32(file_names: Iterable[str], crc32: str | None) -> bool:
+    """Return True when any file name contains the target CRC32."""
     normalized_crc32 = _normalize_crc32(crc32)
     if not normalized_crc32:
         return False
 
-    return any(
-        normalized_crc32.lower() in file_name.lower()
-        for file_name in _iter_nyaa_resource_file_names(resource)
-    )
+    normalized_crc32_lower = normalized_crc32.lower()
+    for file_name in file_names:
+        if normalized_crc32_lower in file_name.lower():
+            return True
+    return False
 
 
-def _episode_crc_options(episode: EpisodeReleaseMetadata, prefer_extended: bool) -> list[tuple[CrcField, str]]:
+# TODO: This feels so weird, fix this function up later
+def _episode_crc_options(episode: EpisodeReleaseMetadata, prefer_extended: bool) -> list[tuple[bool, str]]:
     standard_crc32 = _normalize_crc32(episode.get("crc32"))
     extended_crc32 = _normalize_crc32(episode.get("crc32_extended"))
 
-    options: list[tuple[CrcField, str | None]]
+    options: list[tuple[bool, str | None]]
     if prefer_extended:
-        options = [("crc32_extended", extended_crc32), ("crc32", standard_crc32)]
+        options = [(True, extended_crc32), (False, standard_crc32)]
     else:
-        options = [("crc32", standard_crc32), ("crc32_extended", extended_crc32)]
+        options = [(False, standard_crc32), (True, extended_crc32)]
 
-    valid_options: list[tuple[CrcField, str]] = []
-    for field, crc32 in options:
+    valid_options: list[tuple[bool, str]] = []
+    for is_extended, crc32 in options:
         if crc32 is not None:
-            valid_options.append((field, crc32))
+            valid_options.append((is_extended, crc32))
 
     return valid_options
+
+
+def _episode_override_crc_options(
+    episode: EpisodeReleaseMetadata,
+    overrides: Sequence[EpisodeCrc32Override],
+    prefer_extended: bool,
+) -> list[tuple[bool, str, EpisodeCrc32Override]]:
+    matching_overrides = [
+        override
+        for override in overrides
+        if _override_matches_episode(override, episode)
+    ]
+
+    options: list[tuple[bool, str, EpisodeCrc32Override]] = []
+    for override in matching_overrides:
+        standard_crc32 = _normalize_crc32(override.get("crc32"))
+        extended_crc32 = _normalize_crc32(override.get("crc32_extended"))
+
+        if prefer_extended:
+            ordered_crc_values = [(True, extended_crc32), (False, standard_crc32)]
+        else:
+            ordered_crc_values = [(False, standard_crc32), (True, extended_crc32)]
+
+        for is_extended, crc32 in ordered_crc_values:
+            if crc32 is not None:
+                options.append((is_extended, crc32, override))
+
+    return options
+
+
+def _override_matches_episode(
+    override: EpisodeCrc32Override,
+    episode: EpisodeReleaseMetadata,
+) -> bool:
+    return (
+        override.get("season") == episode.get("season")
+        and override.get("ep_number") == episode.get("ep_number")
+    )
+
+
+def _release_date_matches_expected_date(
+    *,
+    release: OnePaceRelease,
+    expected_date: object,
+) -> bool:
+    distance = _release_date_distance_days(release=release, expected_date=expected_date)
+    if distance is None:
+        return False
+    return abs(distance) <= DATE_MATCH_WINDOW_DAYS
 
 
 def _find_ranked_individual_release_candidates(
     episode: EpisodeReleaseMetadata,
     releases: Sequence[OnePaceRelease],
-    crc_field: CrcField,
+    *,
+    is_extended: bool,
 ) -> list[OnePaceRelease]:
     episode_titles = _episode_individual_title_candidates(episode)
-    wants_extended = crc_field == "crc32_extended"
     matches: list[OnePaceRelease] = []
     for release in releases:
         for episode_title in episode_titles:
-            if _is_individual_title_match(release, episode_title, wants_extended=wants_extended):
+            if _is_individual_title_match(release, episode_title, is_extended=is_extended):
                 matches.append(release)
                 break
 
@@ -229,6 +354,7 @@ def _verify_release_candidate(
     nyaa_client: NyaaResourceClient,
     resource_cache: dict[int, NyaaResource],
     resolve_info_hash_to_id_func: NyaaIdResolver,
+    crc32_override_note: str | None = None,
 ) -> ResolvedRelease | None:
     nyaa_id = _release_nyaa_id(release, resolve_info_hash_to_id_func)
     if nyaa_id is None:
@@ -262,6 +388,36 @@ def _verify_release_candidate(
         crc32=crc32,
         info_hash=info_hash,
         magnet_uri=magnet_uri,
+        crc32_override_note=crc32_override_note,
+    )
+
+
+def _verify_release_feed_file_name_candidate(
+    *,
+    release: OnePaceRelease,
+    crc32: str,
+    crc32_override_note: str | None,
+) -> ResolvedRelease | None:
+    if _release_explicit_nyaa_id(release) is not None:
+        return None
+
+    torrent_file_name = release.get("torrent_file_name") or ""
+    if not _file_names_contain_crc32([torrent_file_name], crc32):
+        return None
+
+    info_hash = (release.get("info_hash") or "").lower()
+    magnet_uri = release.get("magnet_uri") or ""
+    if not info_hash or not magnet_uri:
+        return None
+
+    return ResolvedRelease(
+        release=cast(OnePaceRelease, dict(release)),
+        nyaa_resource=None,
+        nyaa_id=None,
+        crc32=crc32,
+        info_hash=info_hash,
+        magnet_uri=magnet_uri,
+        crc32_override_note=crc32_override_note,
     )
 
 
@@ -269,11 +425,9 @@ def _release_nyaa_id(
     release: OnePaceRelease,
     resolve_info_hash_to_id_func: NyaaIdResolver,
 ) -> int | None:
-    nyaa_id = release.get("nyaa_id")
-    if isinstance(nyaa_id, int):
-        return nyaa_id
-    if isinstance(nyaa_id, str) and nyaa_id.isdigit():
-        return int(nyaa_id)
+    explicit_nyaa_id = _release_explicit_nyaa_id(release)
+    if explicit_nyaa_id is not None:
+        return explicit_nyaa_id
 
     info_hash = release.get("info_hash")
     if isinstance(info_hash, str) and info_hash:
@@ -282,18 +436,27 @@ def _release_nyaa_id(
     return None
 
 
+def _release_explicit_nyaa_id(release: OnePaceRelease) -> int | None:
+    nyaa_id = release.get("nyaa_id")
+    if isinstance(nyaa_id, int):
+        return nyaa_id
+    if isinstance(nyaa_id, str) and nyaa_id.isdigit():
+        return int(nyaa_id)
+    return None
+
+
 def _is_individual_title_match(
     release: OnePaceRelease,
     episode_title: str,
     *,
-    wants_extended: bool,
+    is_extended: bool,
 ) -> bool:
     release_title = _release_normalized_title(release)
     if not release_title or not episode_title:
         return False
     if release_title == episode_title:
         return True
-    return wants_extended and release_title in {f"{episode_title} extended", f"{episode_title} extended cut"}
+    return is_extended and release_title in {f"{episode_title} extended", f"{episode_title} extended cut"}
 
 
 def _is_batch_title_match(
@@ -314,7 +477,7 @@ def _is_batch_title_match(
 
 
 def _release_candidate_date_rank(episode: EpisodeReleaseMetadata, release: OnePaceRelease) -> tuple[int, int]:
-    distance = _release_date_distance_days(episode, release)
+    distance = _release_date_distance_days(release=release, expected_date=episode.get("release_date"))
     if distance is None:
         return (2, NO_DATE_DISTANCE)
     abs_distance = abs(distance)
@@ -323,12 +486,16 @@ def _release_candidate_date_rank(episode: EpisodeReleaseMetadata, release: OnePa
     return (1, abs_distance)
 
 
-def _release_date_distance_days(episode: EpisodeReleaseMetadata, release: OnePaceRelease) -> int | None:
-    episode_date = _parse_iso_date(episode.get("release_date"))
+def _release_date_distance_days(
+    *,
+    release: OnePaceRelease,
+    expected_date: object,
+) -> int | None:
+    parsed_expected_date = _parse_iso_date(expected_date)
     release_date = _parse_iso_date(release.get("publication_date"))
-    if episode_date is None or release_date is None:
+    if parsed_expected_date is None or release_date is None:
         return None
-    return (release_date - episode_date).days
+    return (release_date - parsed_expected_date).days
 
 
 def _episode_individual_title_candidates(episode: EpisodeReleaseMetadata) -> list[str]:

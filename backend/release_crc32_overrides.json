@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "episode_crc32_overrides": [
+    {
+      "season": 14,
+      "ep_number": 6,
+      "release_date": "2021-07-06",
+      "crc32": "9FC7EE52",
+      "note": "Release feed file checksum differs from the spreadsheet CRC."
+    },
+    {
+      "season": 30,
+      "ep_number": 13,
+      "release_date": "2013-05-17",
+      "crc32": "316829437",
+      "note": "Batch release file checksum differs from the spreadsheet CRC."
+    },
+    {
+      "season": 36,
+      "ep_number": 13,
+      "release_date": "2024-09-06",
+      "crc32": "97E4F5E3",
+      "crc32_extended": "88019227",
+      "note": "Release feed file checksums differ from the spreadsheet CRCs."
+    }
+  ]
+}
