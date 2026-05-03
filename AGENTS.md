@@ -13,7 +13,7 @@ This file guides coding agents working in this repository.
 
 ## First Pass
 
-- Start by reading [README.md](onepace-jellyfin-web-ui/README.md) and the files closest to the requested change.
+- Start by reading [README.md](README.md) and the files closest to the requested change.
 - Check the working tree before editing and do not overwrite unrelated user changes.
 - Treat `.env` files, qBittorrent credentials, and local media paths as sensitive.
 - Do not treat runtime artifacts like `backend/backend.sqlite3` or downloaded metadata under `backend/data/` as source files to hand-edit.
@@ -74,7 +74,7 @@ npx ctx7@latest docs <libraryId> "<user question>"
 
 ## Frontend Notes
 
-- Run frontend commands from `frontend/`.
+- Run frontend commands from `frontend/` using `pnpm`.
 - Follow the existing Svelte 5 style: use runes like `$state`, `$derived`, and `$effect` instead of introducing older store-heavy patterns unless the surrounding code already uses them.
 - For Svelte/SvelteKit documentation or API questions, use the Svelte MCP workflow above instead of generic library lookup.
 - Data is commonly fetched in `+page.server.ts` files, then copied into local mutable state so SSE updates can patch rows in place without full reloads.
@@ -94,7 +94,7 @@ npx ctx7@latest docs <libraryId> "<user question>"
 
 ```bash
 cd frontend
-npm run generate-types
+pnpm generate-types
 ```
 
 - `generate-types` expects the backend to be running at `http://localhost:8000`.
@@ -118,16 +118,16 @@ Frontend:
 
 ```bash
 cd frontend
-npm install
-npm run dev
-npm run build
-npm run generate-types
+pnpm install
+pnpm dev
+pnpm build
+pnpm generate-types
 ```
 
 ## Validation
 
 - For backend-only changes, run the smallest relevant `pytest` scope first, then broader tests if needed.
-- For frontend-only changes, run `npm run build`.
+- For frontend-only changes, run `pnpm build`.
 - For user-facing frontend changes, use Chrome DevTools MCP for a quick sanity check when feasible.
 - For API contract changes, regenerate `frontend/src/lib/types/api.d.ts` and then run the frontend build.
 - If validation is skipped because local services, env vars, or networked dependencies are unavailable, say so explicitly in the final handoff.

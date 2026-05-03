@@ -6,6 +6,12 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
+# Local IDE/agent state
+.claude/
+.codex/
+.idea/
+.DS_Store
+
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
@@ -139,15 +145,23 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
 # Ignore metadata Git repo inside this repo, as well as downloaded data files
-backend/data/*
+backend/data/
 
 # Ignore Python cache files
 __pycache__/
 *.py[cod]
+.pytest_cache/
+venv/
+.venv/
 
 # SQLite database files
+*.sqlite
+*.sqlite-*
 *.sqlite3
 *.sqlite3.bak
+*.db
+*.db-*
+*.bak
 
 # pytest cov runtime file
 .coverage
