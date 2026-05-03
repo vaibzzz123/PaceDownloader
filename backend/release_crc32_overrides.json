@@ -9,11 +9,46 @@
       "note": "Release feed file checksum differs from the spreadsheet CRC."
     },
     {
+      "season": 16,
+      "ep_number": 14,
+      "release_date": "2024-06-21",
+      "crc32": "702231E9",
+      "note": "Corrected Nyaa release date differs from the spreadsheet release date."
+    },
+    {
+      "season": 16,
+      "ep_number": 19,
+      "release_date": "2025-01-18",
+      "crc32": "88263203",
+      "note": "Corrected Nyaa release is missing or mislabeled in the One Pace release feed."
+    },
+    {
       "season": 30,
       "ep_number": 13,
       "release_date": "2013-05-17",
       "crc32": "316829437",
       "note": "Batch release file checksum differs from the spreadsheet CRC."
+    },
+    {
+      "season": 34,
+      "ep_number": 1,
+      "release_date": "2021-01-04",
+      "crc32": "A4325AC2",
+      "note": "Batch release file checksum and release date differ from the spreadsheet metadata."
+    },
+    {
+      "season": 34,
+      "ep_number": 2,
+      "release_date": "2021-01-04",
+      "crc32": "759D49BC",
+      "note": "Batch release file checksum and release date differ from the spreadsheet metadata."
+    },
+    {
+      "season": 34,
+      "ep_number": 3,
+      "release_date": "2021-01-04",
+      "crc32": "F1430B21",
+      "note": "Batch release file checksum and release date differ from the spreadsheet metadata."
     },
     {
       "season": 36,
