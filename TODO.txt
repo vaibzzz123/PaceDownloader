@@ -14,6 +14,7 @@ Main things left to implement for MVP:
 - Dockerize the full app
 
 Future features:
+- If data fetching fails, don't crash app but let it proceed, preventing other data fetches, and giving user notification of error (little yellow banner at top of page)
 - If user changes torrent status from qbt instead of the app, make sure the app is updated to reflect that
 - Changes in file names and updated episodes (ex redone eps by One Pace team, their crc32 might change, need to think about how to approach this)
 - Maybe authentication?
