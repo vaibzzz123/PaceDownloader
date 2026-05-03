@@ -22,6 +22,7 @@ One Pace releases episodes as torrents on Nyaa.si. This app provides a web UI to
 - **qBittorrent** with Web UI enabled (accessible from the machine running this app)
 - **Python 3.14+** for the backend
 - **Node.js 24+** for the frontend
+- **pnpm 10+** for frontend dependencies (Corepack recommended)
 - A running **Jellyfin** instance with a configured media library
 
 ## Setup
@@ -51,14 +52,17 @@ fastapi dev main.py
 ```bash
 cd frontend
 
+# Enable pnpm through Corepack if needed
+corepack enable pnpm
+
 # Install dependencies
-npm install
+pnpm install
 
 # Create a .env file in the root directory of the frontend (for development, see below):
-touch frontend/.env
+touch .env
 
 # Run the dev server
-npm run dev
+pnpm dev
 # Frontend is now available at http://localhost:5173
 ```
 
@@ -84,7 +88,7 @@ Settings can also be stored in the SQLite database (`backend/backend.sqlite3`). 
 Also create a `.env` file in the root directory of the frontend (for development):
 
 ```
-BACKEND_URL=http://localhost:8000
+PUBLIC_BACKEND_URL=http://localhost:8000
 ```
 
 **Path mapping example** (qBittorrent in Docker):
@@ -159,7 +163,7 @@ frontend/src/
 | `GET` | `/events` | SSE stream for download progress |
 | `GET` | `/posters/*` | Season poster images |
 
-The backend exposes an OpenAPI spec at `/openapi.json`. Run `npm run generate-types` in the frontend to regenerate TypeScript types from it.
+The backend exposes an OpenAPI spec at `/openapi.json`. Run `pnpm generate-types` in the frontend to regenerate TypeScript types from it.
 
 ## Development
 
@@ -177,13 +181,13 @@ pytest --cov                        # with coverage
 With the backend running:
 
 ```bash
-cd frontend && npm run generate-types
+cd frontend && pnpm generate-types
 ```
 
 ### Production build
 
 ```bash
-cd frontend && npm run build
+cd frontend && pnpm build
 ```
 
 ## Tech Stack

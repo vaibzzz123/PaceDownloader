@@ -65,16 +65,16 @@ All commands run from the `frontend/` directory:
 
 ```bash
 # Install dependencies
-cd frontend && npm install
+cd frontend && pnpm install
 
 # Run the dev server (serves on http://localhost:5173)
-cd frontend && npm run dev
+cd frontend && pnpm dev
 
 # Generate TypeScript types from backend OpenAPI spec (backend must be running)
-cd frontend && npm run generate-types
+cd frontend && pnpm generate-types
 
 # Build for production
-cd frontend && npm run build
+cd frontend && pnpm build
 ```
 
 ## Tech Stack
