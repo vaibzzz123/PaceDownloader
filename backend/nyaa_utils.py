@@ -1,6 +1,10 @@
+from collections.abc import Iterable, Iterator
+from typing import Protocol, cast
+
 import requests
 from requests.exceptions import RequestException
 
+from date_utils import parse_iso_date
 from db import get_settings
 from logging_config import get_logger
 from pynyaasi.nyaasi import NyaaSiClient
@@ -10,6 +14,49 @@ logger = get_logger(__name__)
 nyaa_client = NyaaSiClient()
 
 NYAA_BASE_URL = "https://nyaa.si"
+NYAA_SEARCH_RESULT_LIMIT = 10
+
+
+class NyaaDirectoryTreeNode(Protocol):
+    """File or folder node from pynyaasi's torrent directory tree."""
+
+    name: str
+    is_folder: bool
+
+    def __iter__(self) -> Iterator["NyaaDirectoryTreeNode"]:
+        ...
+
+
+class NyaaFlatFileItem(Protocol):
+    """Flat file item shape used by tests or alternate Nyaa resource clients."""
+
+    name: str
+
+
+class NyaaResource(Protocol):
+    """Subset of pynyaasi's ResourceItem used for torrent verification."""
+
+    info_hash: str | None
+    magnet_url: str | None
+    directory_tree: NyaaDirectoryTreeNode | None
+
+
+class NyaaSearchItem(Protocol):
+    """Subset of pynyaasi's ListItem used for CRC32 fallback searches."""
+
+    id: int
+    title: str
+    time: str
+
+
+class NyaaResourceClient(Protocol):
+    """Client interface needed to search and fetch Nyaa resources."""
+
+    def get_resource(self, nyaa_id: int) -> NyaaResource:
+        ...
+
+    def iter_items(self, query: str = "") -> Iterable[NyaaSearchItem]:
+        ...
 
 
 def extract_nyaa_id(torrent_link: str) -> tuple[str, str] | None:
@@ -57,6 +104,66 @@ def resolve_info_hash_to_id(info_hash: str) -> int | None:
     except (RequestException, ValueError) as e:
         logger.error("Failed to resolve info hash %s: %s", info_hash, e)
     return None
+
+
+def iter_nyaa_resource_file_names(resource: NyaaResource) -> Iterable[str]:
+    """Yield file names from pynyaasi's directory-tree or flat-file resource shapes."""
+    directory_tree = resource.directory_tree
+    if directory_tree is not None:
+        yield from _iter_nyaa_directory_tree_file_names(directory_tree)
+        return
+
+    files = cast(Iterable[NyaaFlatFileItem | str] | None, getattr(resource, "files", None))
+    if files is not None:
+        for file_item in files:
+            name = file_item if isinstance(file_item, str) else getattr(file_item, "name", None)
+            if isinstance(name, str):
+                yield name
+
+
+def iter_nyaa_search_items_by_crc32(
+    *,
+    nyaa_client: NyaaResourceClient,
+    crc32: str,
+    search_cache: dict[str, list[NyaaSearchItem]],
+) -> Iterable[NyaaSearchItem]:
+    """Search Nyaa by CRC32 with a small per-resolution cache and result cap."""
+    cached_items = search_cache.get(crc32)
+    if cached_items is not None:
+        yield from cached_items
+        return
+
+    search_items: list[NyaaSearchItem] = []
+    try:
+        for index, search_item in enumerate(nyaa_client.iter_items(query=crc32)):
+            if index >= NYAA_SEARCH_RESULT_LIMIT:
+                break
+            search_items.append(search_item)
+    except Exception as e:
+        logger.warning("Could not search Nyaa for CRC32 %s: %s", crc32, e)
+        return
+
+    search_cache[crc32] = search_items
+    yield from search_items
+
+
+def date_string_from_nyaa_time(value: object) -> str | None:
+    """Extract the ISO date portion from a Nyaa list-item timestamp."""
+    if not isinstance(value, str) or len(value) < 10:
+        return None
+    date_text = value[:10]
+    if parse_iso_date(date_text) is None:
+        return None
+    return date_text
+
+
+def _iter_nyaa_directory_tree_file_names(node: NyaaDirectoryTreeNode) -> Iterable[str]:
+    if not node.is_folder:
+        yield node.name
+        return
+
+    for child in node:
+        yield from _iter_nyaa_directory_tree_file_names(child)
 
 
 def get_nyaa_resource_for_episode(episode: dict):

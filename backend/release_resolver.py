@@ -4,15 +4,24 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
-from typing import Protocol, TypedDict, cast
+from typing import TypedDict, cast
 
+from crc_utils import file_names_contain_crc32, normalize_crc32
 from data_sources import RELEASES_JSON_PATH
+from date_utils import parse_iso_date
 from logging_config import get_logger
-from nyaa_utils import resolve_info_hash_to_id
+from nyaa_utils import (
+    NyaaResource,
+    NyaaResourceClient,
+    NyaaSearchItem,
+    date_string_from_nyaa_time,
+    iter_nyaa_resource_file_names,
+    iter_nyaa_search_items_by_crc32,
+    resolve_info_hash_to_id,
+)
 from pynyaasi.nyaasi import NyaaSiClient
 
 logger = get_logger(__name__)
@@ -51,37 +60,6 @@ class OnePaceRelease(TypedDict, total=False):
     magnet_uri: str | None
     info_hash: str | None
     torrent_file_name: str | None
-
-
-class NyaaDirectoryTreeNode(Protocol):
-    """File or folder node from pynyaasi's torrent directory tree."""
-
-    name: str
-    is_folder: bool
-
-    def __iter__(self) -> Iterator[NyaaDirectoryTreeNode]:
-        ...
-
-
-class NyaaFlatFileItem(Protocol):
-    """Flat file item shape used by tests or alternate Nyaa resource clients."""
-
-    name: str
-
-
-class NyaaResource(Protocol):
-    """Subset of pynyaasi's ResourceItem used for verification."""
-
-    info_hash: str | None
-    magnet_url: str | None
-    directory_tree: NyaaDirectoryTreeNode | None
-
-
-class NyaaResourceClient(Protocol):
-    """Client interface needed to fetch a Nyaa resource by ID."""
-
-    def get_resource(self, nyaa_id: int) -> NyaaResource:
-        ...
 
 
 class ReleaseResolutionError(ValueError):
@@ -163,6 +141,7 @@ def resolve_episode_release(
     override_records = crc32_overrides if crc32_overrides is not None else load_crc32_overrides()
     client = nyaa_client or NyaaSiClient()
     resource_cache: dict[int, NyaaResource] = {}
+    search_cache: dict[str, list[NyaaSearchItem]] = {}
 
     for is_extended, crc32 in _episode_crc_options(episode, prefer_extended):
         candidates = [
@@ -223,33 +202,42 @@ def resolve_episode_release(
             if resolved is not None:
                 return resolved
 
+    for is_extended, crc32, override in _episode_override_crc_options(episode, override_records, prefer_extended):
+        resolved = _resolve_from_nyaa_search(
+            episode=episode,
+            crc32=crc32,
+            is_extended=is_extended,
+            expected_date=override.get("release_date"),
+            nyaa_client=client,
+            resource_cache=resource_cache,
+            search_cache=search_cache,
+            crc32_override_note=override.get("note"),
+        )
+        if resolved is not None:
+            return resolved
+
+    for is_extended, crc32 in _episode_crc_options(episode, prefer_extended):
+        resolved = _resolve_from_nyaa_search(
+            episode=episode,
+            crc32=crc32,
+            is_extended=is_extended,
+            expected_date=episode.get("release_date"),
+            nyaa_client=client,
+            resource_cache=resource_cache,
+            search_cache=search_cache,
+        )
+        if resolved is not None:
+            return resolved
+
     raise ReleaseResolutionError(
         f"Could not find a One Pace release containing CRC32 for {episode.get('ep_name') or episode.get('sheet_episode_name')}"
     )
 
 
-def release_contains_crc32(resource: NyaaResource, crc32: str | None) -> bool:
-    """Return True when a Nyaa resource file tree contains the target CRC32."""
-    return _file_names_contain_crc32(_iter_nyaa_resource_file_names(resource), crc32)
-
-
-def _file_names_contain_crc32(file_names: Iterable[str], crc32: str | None) -> bool:
-    """Return True when any file name contains the target CRC32."""
-    normalized_crc32 = _normalize_crc32(crc32)
-    if not normalized_crc32:
-        return False
-
-    normalized_crc32_lower = normalized_crc32.lower()
-    for file_name in file_names:
-        if normalized_crc32_lower in file_name.lower():
-            return True
-    return False
-
-
 # TODO: This feels so weird, fix this function up later
 def _episode_crc_options(episode: EpisodeReleaseMetadata, prefer_extended: bool) -> list[tuple[bool, str]]:
-    standard_crc32 = _normalize_crc32(episode.get("crc32"))
-    extended_crc32 = _normalize_crc32(episode.get("crc32_extended"))
+    standard_crc32 = normalize_crc32(episode.get("crc32"))
+    extended_crc32 = normalize_crc32(episode.get("crc32_extended"))
 
     options: list[tuple[bool, str | None]]
     if prefer_extended:
@@ -278,8 +266,8 @@ def _episode_override_crc_options(
 
     options: list[tuple[bool, str, EpisodeCrc32Override]] = []
     for override in matching_overrides:
-        standard_crc32 = _normalize_crc32(override.get("crc32"))
-        extended_crc32 = _normalize_crc32(override.get("crc32_extended"))
+        standard_crc32 = normalize_crc32(override.get("crc32"))
+        extended_crc32 = normalize_crc32(override.get("crc32_extended"))
 
         if prefer_extended:
             ordered_crc_values = [(True, extended_crc32), (False, standard_crc32)]
@@ -361,33 +349,26 @@ def _verify_release_candidate(
         logger.debug("Skipping release without resolvable Nyaa ID: %s", release.get("title"))
         return None
 
-    try:
-        # Minimizing requests to nyaa api for every resolve
-        resource = resource_cache.get(nyaa_id)
-        if resource is None:
-            resource = nyaa_client.get_resource(nyaa_id)
-            resource_cache[nyaa_id] = resource
-    except Exception as e:
-        logger.warning("Could not fetch Nyaa resource %s for release %s: %s", nyaa_id, release.get("title"), e)
+    resource = _get_cached_nyaa_resource(
+        nyaa_id=nyaa_id,
+        release=release,
+        nyaa_client=nyaa_client,
+        resource_cache=resource_cache,
+        fetch_context="Nyaa resource",
+    )
+    if resource is None:
         return None
 
-    if not release_contains_crc32(resource, crc32):
+    if not file_names_contain_crc32(iter_nyaa_resource_file_names(resource), crc32):
         logger.debug("Nyaa resource %s did not contain CRC32 %s", nyaa_id, crc32)
         return None
 
-    info_hash = (resource.info_hash or release.get("info_hash") or "").lower()
-    magnet_uri = resource.magnet_url or release.get("magnet_uri") or ""
-    if not info_hash or not magnet_uri:
-        logger.warning("Verified release %s is missing info hash or magnet URI", release.get("title"))
-        return None
-
-    return ResolvedRelease(
-        release=cast(OnePaceRelease, dict(release)),
-        nyaa_resource=resource,
+    return _resolved_release_from_verified_resource(
+        release=release,
+        resource=resource,
         nyaa_id=nyaa_id,
         crc32=crc32,
-        info_hash=info_hash,
-        magnet_uri=magnet_uri,
+        missing_data_context=f"release {release.get('title')}",
         crc32_override_note=crc32_override_note,
     )
 
@@ -402,7 +383,7 @@ def _verify_release_feed_file_name_candidate(
         return None
 
     torrent_file_name = release.get("torrent_file_name") or ""
-    if not _file_names_contain_crc32([torrent_file_name], crc32):
+    if not file_names_contain_crc32([torrent_file_name], crc32):
         return None
 
     info_hash = (release.get("info_hash") or "").lower()
@@ -419,6 +400,149 @@ def _verify_release_feed_file_name_candidate(
         magnet_uri=magnet_uri,
         crc32_override_note=crc32_override_note,
     )
+
+
+def _resolve_from_nyaa_search(
+    *,
+    episode: EpisodeReleaseMetadata,
+    crc32: str,
+    is_extended: bool,
+    expected_date: object,
+    nyaa_client: NyaaResourceClient,
+    resource_cache: dict[int, NyaaResource],
+    search_cache: dict[str, list[NyaaSearchItem]],
+    crc32_override_note: str | None = None,
+) -> ResolvedRelease | None:
+    for search_item in iter_nyaa_search_items_by_crc32(
+        nyaa_client=nyaa_client,
+        crc32=crc32,
+        search_cache=search_cache,
+    ):
+        release = _release_from_nyaa_search_item(search_item)
+        if not _release_date_matches_expected_date(release=release, expected_date=expected_date):
+            continue
+
+        search_title = release.get("title")
+        if not _text_matches_episode_title(search_title, episode=episode, is_extended=is_extended):
+            continue
+
+        resolved = _verify_nyaa_search_candidate(
+            release=release,
+            episode=episode,
+            crc32=crc32,
+            is_extended=is_extended,
+            nyaa_client=nyaa_client,
+            resource_cache=resource_cache,
+            crc32_override_note=crc32_override_note,
+        )
+        if resolved is not None:
+            return resolved
+
+    return None
+
+
+def _verify_nyaa_search_candidate(
+    *,
+    release: OnePaceRelease,
+    episode: EpisodeReleaseMetadata,
+    crc32: str,
+    is_extended: bool,
+    nyaa_client: NyaaResourceClient,
+    resource_cache: dict[int, NyaaResource],
+    crc32_override_note: str | None = None,
+) -> ResolvedRelease | None:
+    nyaa_id = _release_explicit_nyaa_id(release)
+    if nyaa_id is None:
+        return None
+
+    resource = _get_cached_nyaa_resource(
+        nyaa_id=nyaa_id,
+        release=release,
+        nyaa_client=nyaa_client,
+        resource_cache=resource_cache,
+        fetch_context="Nyaa search result",
+    )
+    if resource is None:
+        return None
+
+    file_names = list(iter_nyaa_resource_file_names(resource))
+    if not file_names_contain_crc32(file_names, crc32):
+        logger.debug("Nyaa search result %s did not contain CRC32 %s", nyaa_id, crc32)
+        return None
+
+    if not _file_names_match_episode(file_names, episode=episode, is_extended=is_extended):
+        logger.debug("Nyaa search result %s did not match episode title", nyaa_id)
+        return None
+
+    return _resolved_release_from_verified_resource(
+        release=release,
+        resource=resource,
+        nyaa_id=nyaa_id,
+        crc32=crc32,
+        missing_data_context=f"Nyaa search result {nyaa_id}",
+        crc32_override_note=crc32_override_note,
+    )
+
+
+def _get_cached_nyaa_resource(
+    *,
+    nyaa_id: int,
+    release: OnePaceRelease,
+    nyaa_client: NyaaResourceClient,
+    resource_cache: dict[int, NyaaResource],
+    fetch_context: str,
+) -> NyaaResource | None:
+    try:
+        resource = resource_cache.get(nyaa_id)
+        if resource is None:
+            resource = nyaa_client.get_resource(nyaa_id)
+            resource_cache[nyaa_id] = resource
+        return resource
+    except Exception as e:
+        logger.warning("Could not fetch %s %s for release %s: %s", fetch_context, nyaa_id, release.get("title"), e)
+        return None
+
+
+def _resolved_release_from_verified_resource(
+    *,
+    release: OnePaceRelease,
+    resource: NyaaResource,
+    nyaa_id: int,
+    crc32: str,
+    missing_data_context: str,
+    crc32_override_note: str | None,
+) -> ResolvedRelease | None:
+    info_hash = (resource.info_hash or release.get("info_hash") or "").lower()
+    magnet_uri = resource.magnet_url or release.get("magnet_uri") or ""
+    if not info_hash or not magnet_uri:
+        logger.warning("Verified %s is missing info hash or magnet URI", missing_data_context)
+        return None
+
+    return ResolvedRelease(
+        release=cast(OnePaceRelease, dict(release)),
+        nyaa_resource=resource,
+        nyaa_id=nyaa_id,
+        crc32=crc32,
+        info_hash=info_hash,
+        magnet_uri=magnet_uri,
+        crc32_override_note=crc32_override_note,
+    )
+
+
+def _release_from_nyaa_search_item(search_item: NyaaSearchItem) -> OnePaceRelease:
+    title = getattr(search_item, "title", "")
+    return {
+        "title": title,
+        "normalized_title": normalize_release_lookup_text(title),
+        "publication_date": date_string_from_nyaa_time(getattr(search_item, "time", None)),
+        "categories": [],
+        "nyaa_url": None,
+        "nyaa_id": getattr(search_item, "id", None),
+        "torrent_url": getattr(search_item, "torrent_download_url", None),
+        "magnet_uri": getattr(search_item, "magnet_url", None),
+        "info_hash": None,
+        "torrent_file_name": title,
+    }
 
 
 def _release_nyaa_id(
@@ -476,6 +600,61 @@ def _is_batch_title_match(
     return release_title.startswith(f"{batch_title} ") and not _looks_like_numbered_release(release_title)
 
 
+def _file_names_match_episode(
+    file_names: Iterable[str],
+    *,
+    episode: EpisodeReleaseMetadata,
+    is_extended: bool,
+) -> bool:
+    for file_name in file_names:
+        if _text_matches_episode_title(file_name, episode=episode, is_extended=is_extended):
+            return True
+    return False
+
+
+def _text_matches_episode_title(
+    value: str | None,
+    *,
+    episode: EpisodeReleaseMetadata,
+    is_extended: bool,
+) -> bool:
+    normalized_value = normalize_release_lookup_text(value)
+    if not normalized_value:
+        return False
+
+    for episode_title in _episode_individual_title_candidates(episode):
+        if _normalized_text_contains_episode_title(
+            normalized_value,
+            episode_title=episode_title,
+            is_extended=is_extended,
+        ):
+            return True
+    return False
+
+
+def _normalized_text_contains_episode_title(
+    normalized_value: str,
+    *,
+    episode_title: str,
+    is_extended: bool,
+) -> bool:
+    if is_extended:
+        return (
+            _normalized_text_contains_phrase(normalized_value, f"{episode_title} extended")
+            or _normalized_text_contains_phrase(normalized_value, f"{episode_title} extended cut")
+        )
+
+    if _normalized_text_contains_phrase(normalized_value, f"{episode_title} extended"):
+        return False
+    if _normalized_text_contains_phrase(normalized_value, f"{episode_title} extended cut"):
+        return False
+    return _normalized_text_contains_phrase(normalized_value, episode_title)
+
+
+def _normalized_text_contains_phrase(normalized_value: str, phrase: str) -> bool:
+    return f" {phrase} " in f" {normalized_value} "
+
+
 def _release_candidate_date_rank(episode: EpisodeReleaseMetadata, release: OnePaceRelease) -> tuple[int, int]:
     distance = _release_date_distance_days(release=release, expected_date=episode.get("release_date"))
     if distance is None:
@@ -491,8 +670,8 @@ def _release_date_distance_days(
     release: OnePaceRelease,
     expected_date: object,
 ) -> int | None:
-    parsed_expected_date = _parse_iso_date(expected_date)
-    release_date = _parse_iso_date(release.get("publication_date"))
+    parsed_expected_date = parse_iso_date(expected_date)
+    release_date = parse_iso_date(release.get("publication_date"))
     if parsed_expected_date is None or release_date is None:
         return None
     return (release_date - parsed_expected_date).days
@@ -569,42 +748,3 @@ def _looks_like_numbered_release(title: str) -> bool:
     while words and words[-1] in {"extended", "cut"}:
         words.pop()
     return bool(words and words[-1].isdigit())
-
-
-def _parse_iso_date(value: object) -> date | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        return date.fromisoformat(value.strip())
-    except ValueError:
-        return None
-
-
-def _normalize_crc32(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    crc32 = value.strip().upper()
-    return crc32 or None
-
-
-def _iter_nyaa_resource_file_names(resource: NyaaResource) -> Iterable[str]:
-    directory_tree = resource.directory_tree
-    if directory_tree is not None:
-        yield from _iter_nyaa_directory_tree_file_names(directory_tree)
-        return
-
-    files = cast(Iterable[NyaaFlatFileItem | str] | None, getattr(resource, "files", None))
-    if files is not None:
-        for file_item in files:
-            name = file_item if isinstance(file_item, str) else getattr(file_item, "name", None)
-            if isinstance(name, str):
-                yield name
-
-
-def _iter_nyaa_directory_tree_file_names(node: NyaaDirectoryTreeNode) -> Iterable[str]:
-    if not node.is_folder:
-        yield node.name
-        return
-
-    for child in node:
-        yield from _iter_nyaa_directory_tree_file_names(child)

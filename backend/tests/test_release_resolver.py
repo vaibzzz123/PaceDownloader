@@ -2,7 +2,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from release_resolver import ReleaseResolutionError, release_contains_crc32, resolve_episode_release
+from crc_utils import file_names_contain_crc32
+from nyaa_utils import iter_nyaa_resource_file_names
+from release_resolver import ReleaseResolutionError, resolve_episode_release
 
 
 @dataclass
@@ -31,14 +33,29 @@ class FakeResource:
     directory_tree: FakeDirectory | FakeFile | None
 
 
+@dataclass
+class FakeSearchItem:
+    id: int
+    title: str
+    time: str
+    magnet_url: str = "magnet:search"
+    torrent_download_url: str = "https://example.invalid/download.torrent"
+
+
 class FakeNyaaClient:
-    def __init__(self, resources):
+    def __init__(self, resources, search_results=None):
         self.resources = resources
+        self.search_results = search_results or {}
         self.requested_ids = []
+        self.search_queries = []
 
     def get_resource(self, nyaa_id: int):
         self.requested_ids.append(nyaa_id)
         return self.resources[nyaa_id]
+
+    def iter_items(self, query: str = ""):
+        self.search_queries.append(query)
+        return iter(self.search_results.get(query, []))
 
 
 def _episode(**overrides):
@@ -321,6 +338,207 @@ def test_resolver_can_verify_crc_override_from_release_feed_file_name_without_ny
     assert nyaa_client.requested_ids == []
 
 
+def test_resolver_searches_nyaa_by_crc32_when_release_feed_is_missing_current_release():
+    episode = _episode(
+        ep_name="Fixture Show - S08E14 - Missing Feed Release",
+        season=8,
+        ep_number=14,
+        sheet_episode_name="Missing Feed 14",
+        release_date="2026-06-21",
+        crc32="ABCDEF12",
+    )
+    releases = [
+        _release("Missing Feed 14", -100, publication_date="2026-06-21"),
+    ]
+    nyaa_client = FakeNyaaClient(
+        {
+            -100: _resource("11111111", info_hash="1" * 40, magnet_url="magnet:stale-feed"),
+            200: FakeResource(
+                info_hash="2" * 40,
+                magnet_url="magnet:search-result",
+                directory_tree=FakeDirectory(
+                    FakeFile("[One Pace][100-101] Missing Feed 14 [1080p][ABCDEF12].mkv"),
+                ),
+            ),
+        },
+        search_results={
+            "ABCDEF12": [
+                FakeSearchItem(
+                    id=200,
+                    title="[One Pace][100-101] Missing Feed 14 [1080p][ABCDEF12].mkv",
+                    time="2026-06-21T11:04:39-04:00",
+                ),
+            ],
+        },
+    )
+
+    resolved = resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
+
+    assert resolved.nyaa_id == 200
+    assert resolved.crc32 == "ABCDEF12"
+    assert resolved.magnet_uri == "magnet:search-result"
+    assert nyaa_client.requested_ids == [-100, 200]
+    assert nyaa_client.search_queries == ["ABCDEF12"]
+
+
+def test_resolver_uses_crc_override_release_date_for_nyaa_search_fallback():
+    episode = _episode(
+        ep_name="Fixture Show - S08E14 - Missing Feed Release",
+        season=8,
+        ep_number=14,
+        sheet_episode_name="Missing Feed 14",
+        release_date="2026-06-08",
+        crc32="ABCDEF12",
+    )
+    releases = [
+        _release("Missing Feed 14", -110, publication_date="2026-06-08"),
+    ]
+    nyaa_client = FakeNyaaClient(
+        {
+            -110: _resource("11111111", info_hash="1" * 40, magnet_url="magnet:stale-feed"),
+            210: FakeResource(
+                info_hash="2" * 40,
+                magnet_url="magnet:search-result",
+                directory_tree=FakeDirectory(
+                    FakeFile("[One Pace][100-101] Missing Feed 14 [1080p][ABCDEF12].mkv"),
+                ),
+            ),
+        },
+        search_results={
+            "ABCDEF12": [
+                FakeSearchItem(
+                    id=210,
+                    title="[One Pace][100-101] Missing Feed 14 [1080p][ABCDEF12].mkv",
+                    time="2026-06-21T11:04:39-04:00",
+                ),
+            ],
+        },
+    )
+    overrides = [
+        {
+            "season": 8,
+            "ep_number": 14,
+            "release_date": "2026-06-21",
+            "crc32": "ABCDEF12",
+            "note": "Fixture corrected date",
+        },
+    ]
+
+    resolved = resolve_episode_release(
+        episode,
+        releases,
+        nyaa_client=nyaa_client,
+        crc32_overrides=overrides,
+    )
+
+    assert resolved.nyaa_id == 210
+    assert resolved.crc32 == "ABCDEF12"
+    assert resolved.magnet_uri == "magnet:search-result"
+    assert resolved.crc32_override_note == "Fixture corrected date"
+    assert nyaa_client.requested_ids == [-110, 210]
+    assert nyaa_client.search_queries == ["ABCDEF12"]
+
+
+def test_resolver_tries_crc_override_before_generic_nyaa_search_fallback():
+    episode = _episode(
+        ep_name="Fixture Show - S08E14 - Missing Feed Release",
+        season=8,
+        ep_number=14,
+        sheet_episode_name="Missing Feed 14",
+        release_date="2026-06-21",
+        crc32="11111111",
+    )
+    nyaa_client = FakeNyaaClient(
+        {
+            230: FakeResource(
+                info_hash="3" * 40,
+                magnet_url="magnet:generic-search-result",
+                directory_tree=FakeDirectory(
+                    FakeFile("[One Pace][100-101] Missing Feed 14 [1080p][11111111].mkv"),
+                ),
+            ),
+            231: FakeResource(
+                info_hash="4" * 40,
+                magnet_url="magnet:override-search-result",
+                directory_tree=FakeDirectory(
+                    FakeFile("[One Pace][100-101] Missing Feed 14 [1080p][ABCDEF12].mkv"),
+                ),
+            ),
+        },
+        search_results={
+            "11111111": [
+                FakeSearchItem(
+                    id=230,
+                    title="[One Pace][100-101] Missing Feed 14 [1080p][11111111].mkv",
+                    time="2026-06-21T11:04:39-04:00",
+                ),
+            ],
+            "ABCDEF12": [
+                FakeSearchItem(
+                    id=231,
+                    title="[One Pace][100-101] Missing Feed 14 [1080p][ABCDEF12].mkv",
+                    time="2026-06-21T11:04:39-04:00",
+                ),
+            ],
+        },
+    )
+    overrides = [
+        {
+            "season": 8,
+            "ep_number": 14,
+            "release_date": "2026-06-21",
+            "crc32": "ABCDEF12",
+            "note": "Fixture correction",
+        },
+    ]
+
+    resolved = resolve_episode_release(
+        episode,
+        [],
+        nyaa_client=nyaa_client,
+        crc32_overrides=overrides,
+    )
+
+    assert resolved.nyaa_id == 231
+    assert resolved.crc32 == "ABCDEF12"
+    assert resolved.magnet_uri == "magnet:override-search-result"
+    assert resolved.crc32_override_note == "Fixture correction"
+    assert nyaa_client.requested_ids == [231]
+    assert nyaa_client.search_queries == ["ABCDEF12"]
+
+
+def test_resolver_rejects_nyaa_search_result_when_title_does_not_match():
+    episode = _episode(
+        ep_name="Fixture Show - S08E14 - Missing Feed Release",
+        season=8,
+        ep_number=14,
+        sheet_episode_name="Missing Feed 14",
+        release_date="2026-06-21",
+        crc32="ABCDEF12",
+    )
+    releases = []
+    nyaa_client = FakeNyaaClient(
+        {
+            220: _resource("ABCDEF12", info_hash="2" * 40, magnet_url="magnet:search-result"),
+        },
+        search_results={
+            "ABCDEF12": [
+                FakeSearchItem(
+                    id=220,
+                    title="[One Pace][100-101] Different Feed 14 [1080p][ABCDEF12].mkv",
+                    time="2026-06-21T11:04:39-04:00",
+                ),
+            ],
+        },
+    )
+
+    with pytest.raises(ReleaseResolutionError):
+        resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
+
+    assert nyaa_client.requested_ids == []
+    assert nyaa_client.search_queries == ["ABCDEF12"]
+
+
 def test_resolver_raises_when_no_candidate_contains_crc32():
     episode = _episode(crc32="DEADBEEF")
     releases = [_release("Fixture Arc 01", -60)]
@@ -332,7 +550,7 @@ def test_resolver_raises_when_no_candidate_contains_crc32():
         resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
 
 
-def test_release_contains_crc32_checks_nested_file_tree():
+def test_crc32_file_name_check_handles_nested_nyaa_file_tree():
     resource = FakeResource(
         info_hash="0" * 40,
         magnet_url="magnet:fixture",
@@ -341,5 +559,7 @@ def test_release_contains_crc32_checks_nested_file_tree():
         ),
     )
 
-    assert release_contains_crc32(resource, "abcdef12")
-    assert not release_contains_crc32(resource, "DEADBEEF")
+    file_names = list(iter_nyaa_resource_file_names(resource))
+
+    assert file_names_contain_crc32(file_names, "abcdef12")
+    assert not file_names_contain_crc32(file_names, "DEADBEEF")
