@@ -35,7 +35,7 @@ class FakeResource:
 
 @dataclass
 class FakeSearchItem:
-    id: int
+    id: int | str
     title: str
     time: str
     magnet_url: str = "magnet:search"
@@ -153,6 +153,33 @@ def test_resolver_falls_back_to_batch_release_after_removing_episode_number():
     assert resolved.nyaa_id == -41
     assert resolved.magnet_uri == "magnet:batch"
     assert nyaa_client.requested_ids == [-41]
+
+
+def test_resolver_treats_act_number_release_as_batch_title():
+    episode = _episode(
+        sheet_episode_name="Fixture Act 05",
+        release_date="2026-05-05",
+        crc32="FACEFEED",
+    )
+    releases = [
+        _release("Fixture Act 1", -42, publication_date="2026-04-01"),
+    ]
+    nyaa_client = FakeNyaaClient({
+        -42: FakeResource(
+            info_hash="f" * 40,
+            magnet_url="magnet:act-batch",
+            directory_tree=FakeDirectory(
+                FakeFile("Fixture Act 01 [11111111].mkv"),
+                FakeFile("Fixture Act 05 [FACEFEED].mkv"),
+            ),
+        ),
+    })
+
+    resolved = resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
+
+    assert resolved.nyaa_id == -42
+    assert resolved.magnet_uri == "magnet:act-batch"
+    assert nyaa_client.requested_ids == [-42]
 
 
 def test_resolver_matches_single_episode_arc_when_sheet_name_has_no_episode_number():
@@ -336,6 +363,58 @@ def test_resolver_can_verify_crc_override_from_release_feed_file_name_without_ny
     assert resolved.magnet_uri == "magnet:feed-only"
     assert resolved.crc32_override_note == "Fixture feed correction"
     assert nyaa_client.requested_ids == []
+
+
+def test_resolver_searches_nyaa_by_feed_title_when_batch_release_has_no_nyaa_id():
+    episode = _episode(
+        ep_number=3,
+        sheet_episode_name="Fixture Archive 03",
+        release_date="2026-04-22",
+        crc32="ABCDEF12",
+    )
+    releases = [
+        {
+            "title": "Fixture Archive",
+            "normalized_title": "",
+            "publication_date": "2026-04-22",
+            "categories": [],
+            "nyaa_url": None,
+            "nyaa_id": None,
+            "torrent_url": None,
+            "magnet_uri": "magnet:feed",
+            "info_hash": None,
+            "torrent_file_name": "Fixture Archive.torrent",
+        },
+    ]
+    nyaa_client = FakeNyaaClient(
+        {
+            240: FakeResource(
+                info_hash="2" * 40,
+                magnet_url="magnet:title-search-result",
+                directory_tree=FakeDirectory(
+                    FakeFile("[One Pace][100-200] Fixture Archive 01 [11111111].mkv"),
+                    FakeFile("[One Pace][100-200] Fixture Archive Episode 03 [ABCDEF12].mkv"),
+                ),
+            ),
+        },
+        search_results={
+            "Fixture Archive": [
+                FakeSearchItem(
+                    id="240",
+                    title="[One Pace][100-200] Fixture Archive [720p]",
+                    time="2026-04-22T11:04:39-04:00",
+                ),
+            ],
+        },
+    )
+
+    resolved = resolve_episode_release(episode, releases, nyaa_client=nyaa_client)
+
+    assert resolved.nyaa_id == 240
+    assert resolved.crc32 == "ABCDEF12"
+    assert resolved.magnet_uri == "magnet:title-search-result"
+    assert nyaa_client.requested_ids == [240]
+    assert nyaa_client.search_queries == ["Fixture Archive"]
 
 
 def test_resolver_searches_nyaa_by_crc32_when_release_feed_is_missing_current_release():

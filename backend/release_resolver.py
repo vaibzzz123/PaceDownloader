@@ -19,6 +19,7 @@ from nyaa_utils import (
     NyaaSearchItem,
     date_string_from_nyaa_time,
     iter_nyaa_resource_file_names,
+    iter_nyaa_search_items,
     iter_nyaa_search_items_by_crc32,
     resolve_info_hash_to_id,
 )
@@ -166,6 +167,18 @@ def resolve_episode_release(
             if resolved is not None:
                 return resolved
 
+            resolved = _verify_release_candidate_by_nyaa_title_search(
+                release=release,
+                episode=episode,
+                crc32=crc32,
+                is_extended=is_extended,
+                nyaa_client=client,
+                resource_cache=resource_cache,
+                search_cache=search_cache,
+            )
+            if resolved is not None:
+                return resolved
+
     for is_extended, crc32, override in _episode_override_crc_options(episode, override_records, prefer_extended):
         candidates = [
             *_find_ranked_individual_release_candidates(
@@ -197,6 +210,19 @@ def resolve_episode_release(
             resolved = _verify_release_feed_file_name_candidate(
                 release=release,
                 crc32=crc32,
+                crc32_override_note=override.get("note"),
+            )
+            if resolved is not None:
+                return resolved
+
+            resolved = _verify_release_candidate_by_nyaa_title_search(
+                release=release,
+                episode=episode,
+                crc32=crc32,
+                is_extended=is_extended,
+                nyaa_client=client,
+                resource_cache=resource_cache,
+                search_cache=search_cache,
                 crc32_override_note=override.get("note"),
             )
             if resolved is not None:
@@ -402,6 +428,68 @@ def _verify_release_feed_file_name_candidate(
     )
 
 
+def _verify_release_candidate_by_nyaa_title_search(
+    *,
+    release: OnePaceRelease,
+    episode: EpisodeReleaseMetadata,
+    crc32: str,
+    is_extended: bool,
+    nyaa_client: NyaaResourceClient,
+    resource_cache: dict[int, NyaaResource],
+    search_cache: dict[str, list[NyaaSearchItem]],
+    crc32_override_note: str | None = None,
+) -> ResolvedRelease | None:
+    if _release_explicit_nyaa_id(release) is not None:
+        return None
+
+    for query in _release_title_search_queries(release):
+        for search_item in iter_nyaa_search_items(
+            nyaa_client=nyaa_client,
+            query=query,
+            search_cache=search_cache,
+            search_context=f"release title {query}",
+        ):
+            search_release = _release_from_nyaa_search_item(search_item)
+            if not _search_item_title_matches_release(search_release, release):
+                continue
+
+            nyaa_id = _release_explicit_nyaa_id(search_release)
+            if nyaa_id is None:
+                continue
+
+            resource = _get_cached_nyaa_resource(
+                nyaa_id=nyaa_id,
+                release=release,
+                nyaa_client=nyaa_client,
+                resource_cache=resource_cache,
+                fetch_context="Nyaa title search result",
+            )
+            if resource is None:
+                continue
+
+            file_names = list(iter_nyaa_resource_file_names(resource))
+            if not file_names_contain_crc32(file_names, crc32):
+                logger.debug("Nyaa title search result %s did not contain CRC32 %s", nyaa_id, crc32)
+                continue
+
+            if not _file_names_match_episode(file_names, episode=episode, is_extended=is_extended):
+                logger.debug("Nyaa title search result %s did not match episode title", nyaa_id)
+                continue
+
+            resolved = _resolved_release_from_verified_resource(
+                release=release,
+                resource=resource,
+                nyaa_id=nyaa_id,
+                crc32=crc32,
+                missing_data_context=f"Nyaa title search result {nyaa_id}",
+                crc32_override_note=crc32_override_note,
+            )
+            if resolved is not None:
+                return resolved
+
+    return None
+
+
 def _resolve_from_nyaa_search(
     *,
     episode: EpisodeReleaseMetadata,
@@ -545,6 +633,31 @@ def _release_from_nyaa_search_item(search_item: NyaaSearchItem) -> OnePaceReleas
     }
 
 
+def _release_title_search_queries(release: OnePaceRelease) -> list[str]:
+    queries: list[str] = []
+
+    torrent_file_name = release.get("torrent_file_name")
+    if isinstance(torrent_file_name, str) and torrent_file_name.strip():
+        torrent_title = torrent_file_name.strip()
+        if torrent_title.lower().endswith(".torrent"):
+            torrent_title = torrent_title[:-8].strip()
+        _append_unique_title(queries, torrent_title)
+
+    title = release.get("title")
+    if isinstance(title, str) and title.strip():
+        _append_unique_title(queries, title.strip())
+
+    return queries
+
+
+def _search_item_title_matches_release(search_release: OnePaceRelease, release: OnePaceRelease) -> bool:
+    search_title = _release_normalized_title(search_release)
+    release_title = _release_normalized_title(release)
+    if not search_title or not release_title:
+        return False
+    return _normalized_text_contains_phrase(search_title, release_title)
+
+
 def _release_nyaa_id(
     release: OnePaceRelease,
     resolve_info_hash_to_id_func: NyaaIdResolver,
@@ -679,11 +792,13 @@ def _release_date_distance_days(
 
 def _episode_individual_title_candidates(episode: EpisodeReleaseMetadata) -> list[str]:
     titles: list[str] = []
+    episode_number = _episode_number_suffix(episode)
     for title in _episode_title_values(episode):
         normalized_title = normalize_release_lookup_text(title)
         _append_unique_title(titles, normalized_title)
+        if normalized_title and episode_number is not None:
+            _append_episode_word_title_candidate(titles, normalized_title, episode_number)
         if normalized_title and not _looks_like_numbered_release(normalized_title):
-            episode_number = _episode_number_suffix(episode)
             if episode_number is not None:
                 _append_unique_title(titles, f"{normalized_title} {episode_number}")
 
@@ -714,6 +829,22 @@ def _title_from_episode_file_name(ep_name: str | None) -> str | None:
 def _append_unique_title(titles: list[str], title: str) -> None:
     if title and title not in titles:
         titles.append(title)
+
+
+def _append_episode_word_title_candidate(
+    titles: list[str],
+    normalized_title: str,
+    episode_number: str,
+) -> None:
+    episode_number_suffix = f" {episode_number}"
+    if not normalized_title.endswith(episode_number_suffix):
+        return
+
+    base_title = normalized_title[: -len(episode_number_suffix)]
+    if not base_title or base_title.endswith(" episode"):
+        return
+
+    _append_unique_title(titles, f"{base_title} episode {episode_number}")
 
 
 def _episode_number_suffix(episode: EpisodeReleaseMetadata) -> str | None:
@@ -747,4 +878,6 @@ def _looks_like_numbered_release(title: str) -> bool:
     words = title.split()
     while words and words[-1] in {"extended", "cut"}:
         words.pop()
+    if len(words) >= 2 and words[-2] == "act" and words[-1].isdigit():
+        return False
     return bool(words and words[-1].isdigit())

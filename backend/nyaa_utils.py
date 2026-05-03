@@ -128,22 +128,38 @@ def iter_nyaa_search_items_by_crc32(
     search_cache: dict[str, list[NyaaSearchItem]],
 ) -> Iterable[NyaaSearchItem]:
     """Search Nyaa by CRC32 with a small per-resolution cache and result cap."""
-    cached_items = search_cache.get(crc32)
+    yield from iter_nyaa_search_items(
+        nyaa_client=nyaa_client,
+        query=crc32,
+        search_cache=search_cache,
+        search_context=f"CRC32 {crc32}",
+    )
+
+
+def iter_nyaa_search_items(
+    *,
+    nyaa_client: NyaaResourceClient,
+    query: str,
+    search_cache: dict[str, list[NyaaSearchItem]],
+    search_context: str,
+) -> Iterable[NyaaSearchItem]:
+    """Search Nyaa with a small per-resolution cache and result cap."""
+    cached_items = search_cache.get(query)
     if cached_items is not None:
         yield from cached_items
         return
 
     search_items: list[NyaaSearchItem] = []
     try:
-        for index, search_item in enumerate(nyaa_client.iter_items(query=crc32)):
+        for index, search_item in enumerate(nyaa_client.iter_items(query=query)):
             if index >= NYAA_SEARCH_RESULT_LIMIT:
                 break
             search_items.append(search_item)
     except Exception as e:
-        logger.warning("Could not search Nyaa for CRC32 %s: %s", crc32, e)
+        logger.warning("Could not search Nyaa for %s: %s", search_context, e)
         return
 
-    search_cache[crc32] = search_items
+    search_cache[query] = search_items
     yield from search_items
 
 
