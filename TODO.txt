@@ -9,7 +9,7 @@ Main things left to implement for MVP:
 - Scan existing episodes for torrents in flight on qbt, and create records for those (done!)
 - Add a confirm delete dialog on the frontend for delete operations (done!)
 - Copying metadata only for stuff user has downloaded/wants, not everything (done!)
-- Incorporate releases page and extra overrides for proper episode downloads due to breaking changes in source data
+- Incorporate releases page and extra overrides for proper episode downloads due to breaking changes in source data (done!!)
 - initial setup wizard
 - Dockerize the full app
 
