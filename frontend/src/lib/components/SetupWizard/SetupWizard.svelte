@@ -45,6 +45,8 @@
 
   type StepId = (typeof steps)[number]['id'];
 
+  const setupSections = steps.filter((item) => item.id !== 'welcome' && item.id !== 'review');
+
   let step = $state(0);
 
   const isFinalStep = $derived(step === steps.length);
@@ -52,9 +54,10 @@
   const hasPlaceholderFields = (id: StepId) => id !== 'welcome';
 </script>
 
-<section class="mx-auto flex w-full max-w-4xl flex-col gap-6">
-  <header class="flex flex-col gap-1">
-    <p class="text-sm font-medium text-surface-600-400">Initial setup</p>
+<!-- TODO: Play with the background colours here and on line 81 (div below the Steps component), colours are...weird in dark mode -->
+<section class="card bg-surface-100-900 mx-auto flex w-full max-w-244 flex-col gap-6 p-6 shadow-xl sm:p-8">
+  <header class="flex flex-col gap-2">
+    <p class="text-sm font-medium">Initial setup</p>
     <h1 class="text-2xl font-bold">Configure PaceDownloader</h1>
   </header>
 
@@ -62,33 +65,39 @@
     {step}
     count={steps.length}
     onStepChange={(details) => (step = details.step)}
-    class="w-full"
+    class="flex w-full flex-col gap-5"
   >
-    <Steps.List class="mb-6 overflow-x-auto pb-2">
+    <Steps.List class="flex w-full flex-wrap items-center gap-x-4 gap-y-2 lg:flex-nowrap lg:justify-between">
       {#each steps as item, index (item.id)}
-        <Steps.Item {index}>
-          <Steps.Trigger class="gap-2">
-            <Steps.Indicator>{index + 1}</Steps.Indicator>
-            <span class="hidden text-sm font-medium sm:inline">{item.title}</span>
+        <Steps.Item {index} class="shrink-0">
+          <Steps.Trigger class="btn justify-start gap-2 px-2 py-1.5 text-sm hover:preset-tonal">
+            <Steps.Indicator class="size-7 shrink-0">{index + 1}</Steps.Indicator>
+            <span class="font-medium">{item.title}</span>
           </Steps.Trigger>
-          {#if index < steps.length - 1}
-            <Steps.Separator />
-          {/if}
         </Steps.Item>
       {/each}
     </Steps.List>
 
-    <div class="card bg-surface-100-900 p-5">
+    <div class="card bg-surface-100-900 border-surface-950-50/20 border p-5 shadow-sm sm:p-6">
       {#each steps as item, index (item.id)}
-        <Steps.Content {index} class="min-h-64">
+        <Steps.Content {index} class="min-h-56">
           <div class="flex flex-col gap-4">
-            <div>
+            <div class="max-w-2xl">
               <h2 class="text-xl font-semibold">{item.title}</h2>
-              <p class="text-sm text-surface-600-400">{item.description}</p>
+              <p class="text-sm">{item.description}</p>
             </div>
 
-            {#if hasPlaceholderFields(item.id)}
-              <div class="rounded border border-surface-200-800 p-4 text-sm text-surface-600-400">
+            {#if item.id === 'welcome'}
+              <div class="grid gap-3 sm:grid-cols-2">
+                {#each setupSections as section (section.id)}
+                  <div class="card bg-surface-200-800 border-surface-950-50/10 border p-4">
+                    <h3 class="font-medium">{section.title}</h3>
+                    <p class="mt-1 text-sm">{section.description}</p>
+                  </div>
+                {/each}
+              </div>
+            {:else if hasPlaceholderFields(item.id)}
+              <div class="bg-surface-200-800 border-surface-950-50/10 rounded border p-4 text-sm">
                 {item.title} form fields go here.
               </div>
             {/if}
@@ -96,34 +105,34 @@
         </Steps.Content>
       {/each}
 
-      <Steps.Content index={steps.length} class="min-h-64">
-        <div class="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
-          <div class="preset-filled-success-500 flex size-12 items-center justify-center rounded-full">
+      <Steps.Content index={steps.length} class="min-h-56">
+        <div class="flex min-h-56 flex-col items-center justify-center gap-3 text-center">
+          <div class="preset-filled-primary-500 flex size-12 items-center justify-center rounded-full">
             <CheckIcon class="size-6" />
           </div>
           <div>
             <h2 class="text-xl font-semibold">Setup complete</h2>
-            <p class="text-sm text-surface-600-400">PaceDownloader is ready to save these settings.</p>
+            <p class="text-sm">PaceDownloader is ready to save these settings.</p>
           </div>
         </div>
       </Steps.Content>
+
+      <footer class="mt-5 flex items-center justify-between gap-3">
+        <Steps.PrevTrigger class="btn preset-tonal">
+          <ArrowLeftIcon class="size-4" />
+          <span>Back</span>
+        </Steps.PrevTrigger>
+
+        <Steps.NextTrigger class="btn preset-filled-primary-500">
+          {#if isFinalStep}
+            <CheckIcon class="size-4" />
+            <span>Finish</span>
+          {:else}
+            <span>Next</span>
+            <ArrowRightIcon class="size-4" />
+          {/if}
+        </Steps.NextTrigger>
+      </footer>
     </div>
-
-    <footer class="mt-4 flex items-center justify-between gap-3">
-      <Steps.PrevTrigger class="btn preset-tonal">
-        <ArrowLeftIcon class="size-4" />
-        <span>Back</span>
-      </Steps.PrevTrigger>
-
-      <Steps.NextTrigger class="btn preset-filled-primary-500">
-        {#if isFinalStep}
-          <CheckIcon class="size-4" />
-          <span>Finish</span>
-        {:else}
-          <span>Next</span>
-          <ArrowRightIcon class="size-4" />
-        {/if}
-      </Steps.NextTrigger>
-    </footer>
   </Steps>
 </section>
