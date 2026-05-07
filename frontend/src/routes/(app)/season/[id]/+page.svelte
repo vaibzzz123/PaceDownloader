@@ -87,7 +87,7 @@
     }
   }
 
-  const seasonNum = data.season.num;
+  const seasonNum = $derived(data.season.num);
 
   const DOWNLOADABLE = new Set(['Not Downloaded', 'Error']);
   const PAUSABLE     = new Set(['Downloading', 'Pending']);
@@ -114,8 +114,8 @@
         for (const ep of episodes) if (DELETABLE.has(ep.status)) ep.status = 'Not Downloaded';
         callApi(null, `/season/${seasonNum}`, 'DELETE');
       }}>
-        {#snippet button()}
-          <button class="btn preset-tonal-error rounded-xl text-sm"><Trash2Icon size={18}/><span>Delete All</span></button>
+        {#snippet button(triggerProps)}
+          <button {...triggerProps} class="btn preset-tonal-error rounded-xl text-sm"><Trash2Icon size={18}/><span>Delete All</span></button>
         {/snippet}
       </DeleteDialog>
     {/snippet}
@@ -146,9 +146,12 @@
         {:else}
           <button class="btn-icon" disabled={isLoading || !PAUSABLE.has(episode.status)} onclick={() => callApi(episode.ep_id, `/episode/${episode.ep_id}/pause`, 'POST')}><PauseIcon /></button>
         {/if}
-        <DeleteDialog message="Delete episode {episode.number} - {episode.title}?" onConfirm={() => callApi(episode.ep_id, `/episode/${episode.ep_id}`, 'DELETE')} disabled={isLoading || !DELETABLE.has(episode.status)}>
-          {#snippet button()}
-            <button class="btn-icon" disabled={isLoading || !DELETABLE.has(episode.status)}><Trash2Icon /></button>
+        <DeleteDialog onConfirm={() => callApi(episode.ep_id, `/episode/${episode.ep_id}`, 'DELETE')} disabled={isLoading || !DELETABLE.has(episode.status)}>
+          {#snippet messageSnippet()}
+            Delete episode {episode.number} - <SpoilerText>{episode.title}</SpoilerText>?
+          {/snippet}
+          {#snippet button(triggerProps)}
+            <button {...triggerProps} class="btn-icon" disabled={isLoading || !DELETABLE.has(episode.status)}><Trash2Icon /></button>
           {/snippet}
         </DeleteDialog>
       </td>

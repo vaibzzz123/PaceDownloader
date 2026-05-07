@@ -1,10 +1,12 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
   import XIcon from '@lucide/svelte/icons/x';
   import { Dialog, Portal } from '@skeletonlabs/skeleton-svelte';
 
-  let { button, message = 'Are you sure? This cannot be undone.', onConfirm, disabled = false }: {
-    button: Snippet;
+  let { button, messageSnippet, message = 'Are you sure? This cannot be undone.', onConfirm, disabled = false }: {
+    button: Snippet<[HTMLButtonAttributes]>;
+    messageSnippet?: Snippet;
     message?: string;
     onConfirm: () => void;
     disabled?: boolean;
@@ -16,9 +18,9 @@
 
 <Dialog>
   {#if disabled}
-    {@render button()}
+    {@render button({ disabled })}
   {:else}
-    <Dialog.Trigger>{@render button()}</Dialog.Trigger>
+    <Dialog.Trigger element={button} />
   {/if}
   <Portal>
     <Dialog.Backdrop class="fixed inset-0 z-50 bg-surface-50-950/50" />
@@ -30,7 +32,13 @@
             <XIcon class="size-4" />
           </Dialog.CloseTrigger>
         </header>
-        <Dialog.Description class="text-sm">{message}</Dialog.Description>
+        <Dialog.Description class="text-sm">
+          {#if messageSnippet}
+            {@render messageSnippet()}
+          {:else}
+            {message}
+          {/if}
+        </Dialog.Description>
         <footer class="flex justify-end gap-2">
           <Dialog.CloseTrigger class="btn preset-tonal">Cancel</Dialog.CloseTrigger>
           <Dialog.CloseTrigger class="btn preset-filled-error-500" onclick={onConfirm}>Delete</Dialog.CloseTrigger>

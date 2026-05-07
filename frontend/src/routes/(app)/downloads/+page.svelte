@@ -190,9 +190,12 @@
           {:else}
             <button class="btn-icon" disabled={isLoading || !EP_PAUSABLE.has(item.status)} onclick={() => callApi(episodeLoadingIds, item.ep_id, `/episode/${item.ep_id}/pause`, 'POST')}><PauseIcon /></button>
           {/if}
-          <DeleteDialog message="Delete episode {item.ep_id} - {item.title}?" onConfirm={() => callApi(episodeLoadingIds, item.ep_id, `/episode/${item.ep_id}`, 'DELETE')} disabled={isLoading || !EP_DELETABLE.has(item.status)}>
-            {#snippet button()}
-              <button class="btn-icon" disabled={isLoading || !EP_DELETABLE.has(item.status)}><Trash2Icon /></button>
+          <DeleteDialog onConfirm={() => callApi(episodeLoadingIds, item.ep_id, `/episode/${item.ep_id}`, 'DELETE')} disabled={isLoading || !EP_DELETABLE.has(item.status)}>
+            {#snippet messageSnippet()}
+              Delete episode {item.ep_id} - <SpoilerText>{item.title}</SpoilerText>?
+            {/snippet}
+            {#snippet button(triggerProps)}
+              <button {...triggerProps} class="btn-icon" disabled={isLoading || !EP_DELETABLE.has(item.status)}><Trash2Icon /></button>
             {/snippet}
           </DeleteDialog>
         </td>
@@ -226,8 +229,8 @@
             <button class="btn-icon" disabled={isLoading || !T_PAUSABLE.has(item.status)} onclick={() => callApi(torrentLoadingIds, item.infohash, `/torrent/${item.infohash}/pause`, 'POST')}><PauseIcon /></button>
           {/if}
           <DeleteDialog message={`Delete torrent ${item.name}? This will also delete episodes with episode IDs: ${item.ep_ids.join(', ')}`} onConfirm={() => callApi(torrentLoadingIds, item.infohash, `/torrent/${item.infohash}`, 'DELETE')} disabled={isLoading || !T_DELETABLE.has(item.status)}>
-            {#snippet button()}
-              <button class="btn-icon" disabled={isLoading || !T_DELETABLE.has(item.status)}><Trash2Icon /></button>
+            {#snippet button(triggerProps)}
+              <button {...triggerProps} class="btn-icon" disabled={isLoading || !T_DELETABLE.has(item.status)}><Trash2Icon /></button>
             {/snippet}
           </DeleteDialog>
         </td>
