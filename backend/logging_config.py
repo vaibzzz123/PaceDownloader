@@ -1,4 +1,4 @@
-"""Centralized logging configuration for the One Pace Jellyfin backend."""
+"""Centralized logging configuration for the Pace Downloader backend."""
 
 import logging
 import sys

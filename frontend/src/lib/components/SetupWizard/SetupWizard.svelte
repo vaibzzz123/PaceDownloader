@@ -14,7 +14,7 @@
     {
       id: 'welcome',
       title: 'Welcome',
-      description: 'Start the PaceDownloader setup flow.',
+      description: 'Start the Pace Downloader setup flow.',
     },
     {
       id: 'media',
@@ -24,7 +24,7 @@
     {
       id: 'qbt',
       title: 'qBittorrent',
-      description: 'Connect PaceDownloader to the qBittorrent Web UI.',
+      description: 'Connect Pace Downloader to the qBittorrent Web UI.',
     },
     {
       id: 'paths',
@@ -58,7 +58,7 @@
 <section class="card bg-surface-100-900 mx-auto flex w-full max-w-244 flex-col gap-6 p-6 shadow-xl sm:p-8">
   <header class="flex flex-col gap-2">
     <p class="text-sm font-medium">Initial setup</p>
-    <h1 class="text-2xl font-bold">Configure PaceDownloader</h1>
+    <h1 class="text-2xl font-bold">Configure Pace Downloader</h1>
   </header>
 
   <Steps
@@ -112,7 +112,7 @@
           </div>
           <div>
             <h2 class="text-xl font-semibold">Setup complete</h2>
-            <p class="text-sm">PaceDownloader is ready to save these settings.</p>
+            <p class="text-sm">Pace Downloader is ready to save these settings.</p>
           </div>
         </div>
       </Steps.Content>

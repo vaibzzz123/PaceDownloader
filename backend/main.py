@@ -27,7 +27,7 @@ from api import router as api_router
 from metadata import refresh_build_and_sync_media
 from events import downloads_broadcaster, metadata_broadcaster
 
-logger.info("Starting One Pace Jellyfin backend")
+logger.info("Starting Pace Downloader backend")
 
 media_location_value = settings["media_data_location"]["value"] if settings else ""
 media_location = Path(media_location_value) if media_location_value else None

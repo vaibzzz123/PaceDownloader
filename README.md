@@ -1,4 +1,4 @@
-# Pace-DL
+# Pace Downloader
 
 A full-stack web app that automates downloading [One Pace](https://onepace.net) episodes (fan-edited One Piece anime) via qBittorrent and organizes them into the correct media structure for a [Jellyfin](https://jellyfin.org) media server.
 

@@ -4,7 +4,7 @@ This file guides coding agents working in this repository.
 
 ## Project Snapshot
 
-- `Pace-DL` is a full-stack app for browsing and downloading One Pace episodes through qBittorrent and organizing them for Jellyfin.
+- `Pace Downloader` is a full-stack app for browsing and downloading One Pace episodes through qBittorrent and organizing them for Jellyfin.
 - The backend is `FastAPI` + `SQLite`.
 - The frontend is `SvelteKit 2` + `Svelte 5` runes + `Skeleton UI`.
 - Frontend tooling also includes `Tailwind CSS 4`, `Lucide Svelte`, `Fuse.js`, strict `TypeScript`, and `openapi-typescript`.
