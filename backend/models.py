@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # specific season with season title, season number, season description, and base64 encoded image
 class SeasonResponse(BaseModel):
@@ -38,9 +38,9 @@ class ScanEpisodeInfo(BaseModel):
 
 
 class ScanResultResponse(BaseModel):
-    found: list[ScanEpisodeInfo]
-    already_tracked: list[ScanEpisodeInfo]
-    errors: list[ScanEpisodeInfo]
+    found: list[ScanEpisodeInfo] = Field(default_factory=list)
+    already_tracked: list[ScanEpisodeInfo] = Field(default_factory=list)
+    errors: list[ScanEpisodeInfo] = Field(default_factory=list)
 
 
 class MetadataSyncResponse(BaseModel):
@@ -48,8 +48,8 @@ class MetadataSyncResponse(BaseModel):
     removed_files: int
     removed_directories: int
     skipped_files: int
-    active_seasons: list[int]
-    enabled_backdrops: list[str]
+    active_seasons: list[int] = Field(default_factory=list)
+    enabled_backdrops: list[str] = Field(default_factory=list)
 
 
 class TorrentDownloadResponse(BaseModel):
@@ -57,7 +57,7 @@ class TorrentDownloadResponse(BaseModel):
     name: str
     status: str
     progress: float
-    ep_ids: list[int]
+    ep_ids: list[int] = Field(default_factory=list)
 
 
 class SettingField(BaseModel):
@@ -91,3 +91,39 @@ class SettingsSaveRequest(BaseModel):
     qbt_download_location: str | None = None
     qbt_polling_rate: int = 8
     log_level: str = "INFO"
+
+
+class SetupStepStatus(BaseModel):
+    id: str
+    complete: bool
+    required: bool = True
+    missing_fields: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class SetupStatusResponse(BaseModel):
+    required: bool
+    complete: bool
+    missing_fields: list[str] = Field(default_factory=list)
+    steps: list[SetupStepStatus] = Field(default_factory=list)
+
+
+class SetupValidationResponse(BaseModel):
+    ok: bool
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class SetupMediaValidationRequest(BaseModel):
+    media_data_location: str
+
+
+class SetupQbittorrentValidationRequest(BaseModel):
+    qbt_hostname: str
+    qbt_username: str = ""
+    qbt_password: str = ""
+
+
+class SetupPathMappingValidationRequest(BaseModel):
+    qbt_path_local: str | None = None
+    qbt_path_remote: str | None = None

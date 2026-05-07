@@ -3,12 +3,33 @@ import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import StreamingResponse, JSONResponse
-from models import SeasonResponse, EpisodeResponse, EpisodeDownloadResponse, TorrentDownloadResponse, SettingField, SettingsResponse, SettingsSaveRequest, ScanResultResponse, MetadataSyncResponse
+from models import (
+    SeasonResponse,
+    EpisodeResponse,
+    EpisodeDownloadResponse,
+    TorrentDownloadResponse,
+    SettingField,
+    SettingsResponse,
+    SettingsSaveRequest,
+    ScanResultResponse,
+    MetadataSyncResponse,
+    SetupStatusResponse,
+    SetupMediaValidationRequest,
+    SetupQbittorrentValidationRequest,
+    SetupPathMappingValidationRequest,
+    SetupValidationResponse,
+)
 from metadata import get_seasons, get_episodes, refresh_build_and_sync_media
 from dependencies import get_download_manager
 from download_manager import DownloadManager
 from events import downloads_broadcaster
 from logging_config import get_logger
+from setup_validation import (
+    build_setup_status,
+    validate_media_location,
+    validate_path_mapping,
+    validate_qbittorrent_connection,
+)
 import db
 router = APIRouter()
 logger = get_logger(__name__)
@@ -360,6 +381,38 @@ def save_settings_route(req: SettingsSaveRequest):
     )
     settings = db.get_settings()
     return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
+
+
+@router.get("/setup/status", response_model=SetupStatusResponse)
+def get_setup_status_route():
+    settings = db.get_settings()
+    if settings is None:
+        raise HTTPException(status_code=500, detail="Settings not found")
+    return build_setup_status(settings)
+
+
+@router.post("/setup/validate/media", response_model=SetupValidationResponse)
+def validate_setup_media_route(req: SetupMediaValidationRequest):
+    return validate_media_location(req.media_data_location)
+
+
+@router.post("/setup/validate/qbittorrent", response_model=SetupValidationResponse)
+async def validate_setup_qbittorrent_route(req: SetupQbittorrentValidationRequest):
+    return await asyncio.to_thread(
+        validate_qbittorrent_connection,
+        req.qbt_hostname,
+        req.qbt_username,
+        req.qbt_password,
+    )
+
+
+# Note, assume user has proper path mapping for remote path
+@router.post("/setup/validate/path-mapping", response_model=SetupValidationResponse)
+def validate_setup_path_mapping_route(req: SetupPathMappingValidationRequest):
+    return validate_path_mapping(
+        qbt_path_local=req.qbt_path_local,
+        qbt_path_remote=req.qbt_path_remote,
+    )
 
 
 @router.post("/scan", response_model=ScanResultResponse)
