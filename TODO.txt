@@ -18,5 +18,6 @@ Future features:
 - If user changes torrent status from qbt instead of the app, make sure the app is updated to reflect that
 - Changes in file names and updated episodes (ex redone eps by One Pace team, their crc32 might change, need to think about how to approach this)
 - Redo data-fetching for sheets as excel is no longer needed since links are removed, can be much faster with CSV format
+- Add backend lifecycle management so settings/setup changes can reinitialize qBittorrent, DownloadManager, polling, and startup scan without requiring a container restart
 - Maybe authentication?
 - Proper testing
