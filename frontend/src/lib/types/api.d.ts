@@ -295,6 +295,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Setup Status Route */
+        get: operations["get_setup_status_route_setup_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/validate/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Setup Media Route */
+        post: operations["validate_setup_media_route_setup_validate_media_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/validate/qbittorrent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Setup Qbittorrent Route */
+        post: operations["validate_setup_qbittorrent_route_setup_validate_qbittorrent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/validate/path-mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Setup Path Mapping Route */
+        post: operations["validate_setup_path_mapping_route_setup_validate_path_mapping_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/scan": {
         parameters: {
             query?: never;
@@ -306,6 +374,23 @@ export interface paths {
         put?: never;
         /** Scan Existing Episodes Route */
         post: operations["scan_existing_episodes_route_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metadata/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sync Metadata Route */
+        post: operations["sync_metadata_route_metadata_sync_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -372,6 +457,21 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** MetadataSyncResponse */
+        MetadataSyncResponse: {
+            /** Copied Files */
+            copied_files: number;
+            /** Removed Files */
+            removed_files: number;
+            /** Removed Directories */
+            removed_directories: number;
+            /** Skipped Files */
+            skipped_files: number;
+            /** Active Seasons */
+            active_seasons?: number[];
+            /** Enabled Backdrops */
+            enabled_backdrops?: string[];
+        };
         /** ScanEpisodeInfo */
         ScanEpisodeInfo: {
             /** Ep Id */
@@ -388,11 +488,11 @@ export interface components {
         /** ScanResultResponse */
         ScanResultResponse: {
             /** Found */
-            found: components["schemas"]["ScanEpisodeInfo"][];
+            found?: components["schemas"]["ScanEpisodeInfo"][];
             /** Already Tracked */
-            already_tracked: components["schemas"]["ScanEpisodeInfo"][];
+            already_tracked?: components["schemas"]["ScanEpisodeInfo"][];
             /** Errors */
-            errors: components["schemas"]["ScanEpisodeInfo"][];
+            errors?: components["schemas"]["ScanEpisodeInfo"][];
         };
         /** SeasonResponse */
         SeasonResponse: {
@@ -457,6 +557,71 @@ export interface components {
              */
             log_level: string;
         };
+        /** SetupMediaValidationRequest */
+        SetupMediaValidationRequest: {
+            /** Media Data Location */
+            media_data_location: string;
+        };
+        /** SetupPathMappingValidationRequest */
+        SetupPathMappingValidationRequest: {
+            /** Qbt Path Local */
+            qbt_path_local?: string | null;
+            /** Qbt Path Remote */
+            qbt_path_remote?: string | null;
+        };
+        /** SetupQbittorrentValidationRequest */
+        SetupQbittorrentValidationRequest: {
+            /** Qbt Hostname */
+            qbt_hostname: string;
+            /**
+             * Qbt Username
+             * @default
+             */
+            qbt_username: string;
+            /**
+             * Qbt Password
+             * @default
+             */
+            qbt_password: string;
+        };
+        /** SetupStatusResponse */
+        SetupStatusResponse: {
+            /** Required */
+            required: boolean;
+            /** Complete */
+            complete: boolean;
+            /** Missing Fields */
+            missing_fields?: string[];
+            /** Steps */
+            steps?: components["schemas"]["SetupStepStatus"][];
+        };
+        /** SetupStepStatus */
+        SetupStepStatus: {
+            /** Id */
+            id: string;
+            /** Complete */
+            complete: boolean;
+            /**
+             * Required
+             * @default true
+             */
+            required: boolean;
+            /** Missing Fields */
+            missing_fields?: string[];
+            /** Errors */
+            errors?: string[];
+        };
+        /** SetupValidationResponse */
+        SetupValidationResponse: {
+            /** Ok */
+            ok: boolean;
+            /** Message */
+            message: string;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+        };
         /** TorrentDownloadResponse */
         TorrentDownloadResponse: {
             /** Infohash */
@@ -468,7 +633,7 @@ export interface components {
             /** Progress */
             progress: number;
             /** Ep Ids */
-            ep_ids: number[];
+            ep_ids?: number[];
         };
         /** ValidationError */
         ValidationError: {
@@ -1018,6 +1183,125 @@ export interface operations {
             };
         };
     };
+    get_setup_status_route_setup_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusResponse"];
+                };
+            };
+        };
+    };
+    validate_setup_media_route_setup_validate_media_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupMediaValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_setup_qbittorrent_route_setup_validate_qbittorrent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupQbittorrentValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_setup_path_mapping_route_setup_validate_path_mapping_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetupPathMappingValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupValidationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     scan_existing_episodes_route_scan_post: {
         parameters: {
             query?: never;
@@ -1034,6 +1318,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScanResultResponse"];
+                };
+            };
+        };
+    };
+    sync_metadata_route_metadata_sync_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetadataSyncResponse"];
                 };
             };
         };
