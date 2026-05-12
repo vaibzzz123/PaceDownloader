@@ -1,16 +1,30 @@
-# Setup Wizard Remaining Implementation Spec
+# Setup Wizard Remaining Roadmap
 
 ## Purpose
 
-Finish **Initial Setup** for Pace Downloader without bundling every remaining change into one large patch.
+Finish **Initial Setup** for Pace Downloader in a way that is practical for a human maintainer to implement and verify incrementally.
 
-This spec is written for agents/subagents working independently on slices. Each slice should be small, testable, and should avoid changing unrelated behavior.
+This file used to be organized for agents working in parallel slices. The current goal is different: keep the work readable, dependency-ordered, and easy to drive manually.
+
+## Product Goal
+
+A fresh install should have a clear first-run path:
+
+1. Backend starts even when setup is incomplete.
+2. Visiting the app sends the user to `/setup`.
+3. The setup wizard validates media, qBittorrent, and optional path mapping.
+4. The wizard saves settings.
+5. The user sees a restart-required completion state.
+6. After restarting the backend/container, normal app routes load.
 
 ## Current State
 
-The setup wizard UI shell exists in the frontend.
+The setup wizard shell exists:
 
-The backend now exposes setup status and validation endpoints:
+- `frontend/src/routes/setup/+page.svelte`
+- `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
+
+The backend exposes setup status and validation endpoints:
 
 - `GET /setup/status`
 - `POST /setup/validate/media`
@@ -32,15 +46,33 @@ Backend validation currently covers:
 - optional path mapping consistency
 - local qBittorrent path existence when mapping is configured
 
-Auth is intentionally out of scope for v1.
+Generated frontend API types already appear to include the setup endpoints. Only regenerate `frontend/src/lib/types/api.d.ts` if the backend route or model contract changes.
 
 ## Non-Goals
 
 - Do not add username/password app auth.
 - Do not redesign the whole settings page.
-- Do not change download logic unless working on the backend boot/runtime-error slice.
+- Do not add in-process qBittorrent/download-manager reinitialization for v1.
 - Do not add remote path probing through qBittorrent unless explicitly asked later.
 - Do not hand-edit `frontend/src/lib/types/api.d.ts`; regenerate it from OpenAPI.
+
+## Frontend API Pattern
+
+Do not add `frontend/src/lib/api/setup.ts` for now.
+
+The frontend currently keeps API calls close to the route using them:
+
+- Initial page data is fetched in route-local `+page.server.ts` files.
+- Client-side actions use small local helpers inside the relevant `.svelte` page/component.
+- API response shapes are typed with `components['schemas'][...]` from `$lib/types/api`.
+- Requests use `PUBLIC_BACKEND_URL`.
+
+For setup, follow that pattern:
+
+- Add `frontend/src/routes/setup/+page.server.ts`.
+- Fetch `/settings` and `/setup/status` there.
+- Pass `data.settings` and `data.setupStatus` into `SetupWizard`.
+- Keep setup validation and save helpers local to `SetupWizard.svelte` unless another route starts reusing them.
 
 ## API Contract
 
@@ -169,248 +201,226 @@ Response:
 
 Remote path is trusted. Runtime placement/linking errors should be surfaced separately.
 
-## Slice 1: Regenerate API Types
+## Implementation Order
 
-### Goal
+### Milestone 1: Backend Boots Without Setup
 
-Expose new setup endpoints to frontend TypeScript.
+This is the first dependency. The wizard cannot deliver a good first-run experience if the backend fails before the user can configure it.
 
-### Ownership
+Files to inspect/change:
 
-Frontend generated API types only.
+- `backend/main.py`
+- `backend/qbittorrent.py`
+- `backend/dependencies.py`
+- `backend/download_manager.py`
+- `backend/api.py`
+- backend tests
 
-### Files
+Desired behavior:
 
-- `frontend/src/lib/types/api.d.ts`
+- Backend starts with empty `media_data_location`.
+- Backend starts with empty `qbt_hostname`.
+- Backend starts when qBittorrent is unreachable.
+- `/settings`, `/setup/status`, and `/setup/validate/*` still work.
+- Routes that require the download manager return a clear setup/configuration error.
+- No download polling loop starts without a configured qBittorrent client.
+- For v1, saved setup requires a manual backend/container restart.
 
-### Steps
+Suggested approach:
 
-1. Start backend locally.
-2. Run from `frontend/`:
+1. Initialize DB and logging as today.
+2. Build setup status at boot.
+3. If setup is incomplete, skip qBittorrent client construction.
+4. If setup is incomplete, skip download-manager construction, polling, and startup scan.
+5. Keep setup/settings routes available.
+6. Do not add live lifecycle reinitialization yet.
 
-   ```bash
-   pnpm generate-types
-   ```
+Acceptance criteria:
 
-3. Review generated diff.
+- Backend can start with a fresh or empty settings DB.
+- Setup endpoints work before qBittorrent is configured.
+- Download routes return a useful error shape instead of crashing.
+- Existing configured startup behavior still works.
 
-### Acceptance Criteria
+Validation:
 
-- Generated types include setup status and validation endpoints.
-- No manual edits to generated file.
-- Frontend build still passes after later slices.
+- Add or update backend tests for incomplete setup startup.
+- Add or update API tests for setup endpoint availability.
+- Add or update API tests for qBittorrent/download-manager-required route errors.
 
-### Notes
+### Milestone 2: Setup Route Server Load
 
-`pnpm generate-types` expects backend at `http://localhost:8000`.
+Follow the current SvelteKit pattern instead of introducing a shared setup API client.
 
-## Slice 2: Frontend Setup API Helpers
+Files:
 
-### Goal
+- `frontend/src/routes/setup/+page.server.ts`
+- `frontend/src/routes/setup/+page.svelte`
+- `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
 
-Create a small typed client layer for setup status, validation, and final save.
+Steps:
 
-### Ownership
+1. Add `frontend/src/routes/setup/+page.server.ts`.
+2. Fetch `GET /settings`.
+3. Fetch `GET /setup/status`.
+4. Type responses using `$lib/types/api`.
+5. Return `{ settings, setupStatus }`.
+6. Pass those values from `+page.svelte` into `SetupWizard`.
 
-Frontend setup API utilities.
+Acceptance criteria:
 
-### Candidate Files
+- Setup page has current settings available as initial form values.
+- Setup page has setup status available for initial step completion/error state.
+- Failed server-load requests produce useful SvelteKit errors.
 
-- `frontend/src/lib/api/setup.ts`
-- existing API utility files, if any
-- `frontend/src/lib/types/api.d.ts`
+Validation:
 
-### Steps
+- Run frontend build after wiring.
 
-1. Inspect current frontend fetch patterns.
-2. Add helpers for:
-   - fetch setup status
-   - validate media
-   - validate qBittorrent
-   - validate path mapping
-   - save settings through existing `PUT /settings`
-3. Use `PUBLIC_BACKEND_URL`.
-4. Keep helper responses close to generated OpenAPI types.
+### Milestone 3: Wizard Form State And Validation
 
-### Acceptance Criteria
+Replace the placeholder wizard content with real fields and per-step validation.
 
-- Helpers do not duplicate endpoint strings throughout components.
-- Failed HTTP requests throw useful errors.
-- Validation responses with `ok: false` do not throw by default; UI should display their message.
-
-### Tests
-
-- Typecheck/build in frontend.
-
-## Slice 3: Wizard Form State And Validation Wiring
-
-### Goal
-
-Wire current `SetupWizard.svelte` UI to backend validation endpoints without redirect guard yet.
-
-### Ownership
-
-Setup wizard component and setup route only.
-
-### Candidate Files
+Files:
 
 - `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
 - `frontend/src/routes/setup/+page.svelte`
-- setup API helper from Slice 2
 
-### Steps
+Form state:
 
-1. Add form state for:
-   - `media_data_location`
-   - `qbt_hostname`
-   - `qbt_username`
-   - `qbt_password`
-   - `qbt_path_local`
-   - `qbt_path_remote`
-   - `prefer_extended`
-   - `qbt_category`
-   - `qbt_download_location`
-   - `qbt_polling_rate`
-   - `log_level`
-2. Replace all dummy `"<Step> form fields go here"` placeholders with real fields.
-3. Follow existing settings page field patterns where appropriate:
-   - Skeleton `label`, `input`, `select`, and `checkbox` classes
-   - same setting names as `frontend/src/routes/(app)/settings/+page.svelte`
-   - qBittorrent password input uses `type="password"` and `autocomplete="new-password"`
-   - user-facing labels use friendly domain language instead of raw setting keys
-   - fields with Docker/path ambiguity include short descriptions below the label
-4. Media step calls `POST /setup/validate/media`.
-5. qBittorrent step calls `POST /setup/validate/qbittorrent`.
-6. Paths step calls `POST /setup/validate/path-mapping`.
-7. Preferences step should show optional defaults for `prefer_extended`, `qbt_category`, `qbt_download_location`, `qbt_polling_rate`, and `log_level`.
-8. Optional preference fields should not block Initial Setup unless backend settings validation rejects the final save.
-9. Make it clear through field grouping and defaults that these values can be left unchanged.
-10. Review step shows summarized values, with password masked.
+- `media_data_location`
+- `qbt_hostname`
+- `qbt_username`
+- `qbt_password`
+- `qbt_path_local`
+- `qbt_path_remote`
+- `prefer_extended`
+- `qbt_category`
+- `qbt_download_location`
+- `qbt_polling_rate`
+- `log_level`
 
-### Acceptance Criteria
+Validation behavior:
 
-- User cannot advance past media/qBittorrent/path steps when validation returns `ok: false`.
-- Validation message appears near relevant fields.
-- The wizard contains no dummy placeholder field text.
-- Form controls match existing Skeleton/settings page patterns unless a setup-specific layout is clearer.
-- User-facing field labels are friendly and descriptive; raw setting names stay in code.
-- qBittorrent password is never displayed in review.
-- Advanced/default settings are visible during Initial Setup but are not explicitly required.
+- Media step calls `POST /setup/validate/media`.
+- qBittorrent step calls `POST /setup/validate/qbittorrent`.
+- Paths step calls `POST /setup/validate/path-mapping`.
 - Empty path mapping is accepted.
 - One-sided path mapping is rejected.
-- UI remains usable in light and dark mode.
+- Validation responses with `ok: false` should display their message and should not advance.
+- HTTP/network failures should show a useful error.
 
-### Tests
+UI notes:
 
-- Frontend build.
-- Manual browser check on `/setup`.
-- Optional component tests if existing test infra supports them.
+- Use the existing Skeleton/Svelte patterns from the settings page.
+- Keep labels friendly rather than exposing raw setting keys.
+- qBittorrent password uses `type="password"` and `autocomplete="new-password"`.
+- Preferences are visible but not required unless backend settings validation rejects final save.
+- Review step masks the password.
+- Light and dark modes should remain usable.
 
-## Slice 4: Save Settings And Completion UX
+Suggested labels:
 
-### Goal
+- `media_data_location`: "Media data location" - "Path visible to Pace Downloader where organized One Pace files will be placed."
+- `qbt_hostname`: "qBittorrent Web UI URL" - "URL Pace Downloader uses to reach qBittorrent."
+- `qbt_username`: "qBittorrent username"
+- `qbt_password`: "qBittorrent password"
+- `qbt_path_remote`: "Remote path reported by qBittorrent" - "Path prefix qBittorrent reports for downloaded files, such as `/downloads`."
+- `qbt_path_local`: "Path visible to Pace Downloader" - "Matching path prefix Pace Downloader can read, such as `/data/torrents/downloads`."
+- `qbt_category`: "qBittorrent category"
+- `qbt_download_location`: "qBittorrent download location"
+- `qbt_polling_rate`: "Polling rate"
+- `log_level`: "Log level"
 
-Persist completed setup through existing settings save endpoint.
+Acceptance criteria:
 
-### Ownership
+- Wizard contains no dummy placeholder field text.
+- User cannot advance past media/qBittorrent/path steps when validation fails.
+- Validation messages appear near relevant fields.
+- Password is never displayed in review.
+- Advanced/default settings are visible but clearly optional.
 
-Setup wizard save behavior.
+Validation:
 
-### Candidate Files
+- Run frontend build.
+- Manually check `/setup` in browser.
+
+### Milestone 4: Save Settings And Restart Required UX
+
+Persist setup through the existing settings endpoint.
+
+Files:
 
 - `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
-- setup API helper
-- settings types
+- backend settings models/routes only if the save contract must change
 
-### Steps
+Steps:
 
-1. On final step, submit full settings payload to `PUT /settings`.
+1. On final review, submit the full payload to `PUT /settings`.
 2. Ensure `qbt_polling_rate` is at least `5`.
 3. Preserve current defaults for optional fields.
-4. After successful save, show a restart-required state.
-5. Tell Docker Compose users to restart the backend/app container.
-6. Do not automatically navigate into the app before restart.
+4. Show backend `422` errors inline.
+5. After successful save, show a restart-required state.
+6. Tell Docker Compose users to restart the backend/app container.
+7. Do not automatically navigate into the app before restart.
 
-### Acceptance Criteria
+Acceptance criteria:
 
 - Settings are saved to backend.
-- Backend `422` errors are shown inline.
-- Password is sent only on save/validation, never rendered back.
-- Restart-required state uses existing app/Skeleton visual language.
-- Restart-required state clearly says v1 applies setup after container restart.
-- The screen should explain that **Initial Setup** is not complete until restart finishes.
+- Password is sent only on validation/save and never rendered back.
+- Restart-required state clearly says v1 applies setup after backend/container restart.
+- Initial Setup is presented as incomplete until restart finishes.
 
-### Tests
+Validation:
 
-- Frontend build.
+- Run frontend build.
 - Manual smoke test with backend.
-- Backend settings tests if save contract changes.
 
-## Slice 5: Redirect Guard
+### Milestone 5: App Route Guard
 
-### Goal
+Guard app routes after the backend can boot incomplete and the setup page can save settings.
 
-Automatically send users to `/setup` when setup is incomplete.
+Files to consider:
 
-### Ownership
-
-SvelteKit route layout/load guard.
-
-### Candidate Files
-
-- `frontend/src/routes/+layout.svelte`
-- `frontend/src/routes/+layout.ts` or `+layout.server.ts`
-- `frontend/src/routes/(app)/+layout.ts` or route group layout
+- `frontend/src/routes/(app)/+layout.ts`
+- `frontend/src/routes/(app)/+layout.server.ts`
+- `frontend/src/routes/(app)/+layout.svelte`
 - `frontend/src/routes/setup/+page.svelte`
 
-### Design
+Preferred behavior:
 
-Prefer guarding only the app route group, not every route globally.
+- `/setup` is always accessible.
+- App route group checks `GET /setup/status`.
+- If `required === true`, redirect to `/setup`.
+- If setup config is complete and backend has restarted, app routes proceed.
+- If setup config is complete but the download manager/runtime is unavailable, show restart-required state instead of treating the app as ready.
+- Backend unreachable should show a useful error state, not an infinite redirect.
 
-Suggested behavior:
+Acceptance criteria:
 
-- `/setup` always accessible.
-- app routes check `GET /setup/status`.
-- if `required === true`, redirect to `/setup`.
-- if setup config is complete and backend has restarted, app routes proceed.
-- if setup config is complete but download manager/runtime is unavailable, show restart-required state instead of treating the app as ready.
-
-### Acceptance Criteria
-
-- Visiting app route with incomplete setup redirects to `/setup`.
+- Visiting an app route with incomplete setup redirects to `/setup`.
 - Visiting `/setup` does not redirect-loop.
 - Saved setup plus backend restart allows normal app navigation.
 - Saved setup without backend restart shows restart-required state.
-- Restart-required state appears both on `/setup` after save and on guarded app routes if the user tries to enter before restarting.
-- Backend unreachable should show useful error state, not infinite redirect.
 
-### Tests
+Validation:
 
-- Frontend build.
+- Run frontend build.
 - Manual checks:
   - incomplete setup -> app route redirects
-  - saved setup plus backend restart -> app route loads
   - `/setup` direct load works
+  - saved setup before restart -> restart-required state
+  - saved setup after restart -> app route loads
 
-## Slice 6: Settings Restart Required UX
+### Milestone 6: Settings Restart Required UX
 
-### Goal
+Show **Restart Required** on the Settings page when a saved restart-applied setting changes.
 
-Show **Restart Required** on the Settings page when a saved **Restart-Applied Setting** changes.
-
-### Ownership
-
-Settings page save behavior and user messaging.
-
-### Candidate Files
+Files:
 
 - `frontend/src/routes/(app)/settings/+page.svelte`
-- settings API helper if one exists later
-- optional shared restart-required component
 
-### Restart-Applied Settings
-
-Changing any of these should show **Restart Required** after a successful save:
+Restart-applied settings:
 
 - `media_data_location`
 - `qbt_hostname`
@@ -425,32 +435,15 @@ Changing any of these should show **Restart Required** after a successful save:
 
 `prefer_extended` does not require restart because download requests already read the current setting when they start.
 
-### Settings Page Labels
-
-The Settings page already uses friendly labels. Do not redesign or rename the Settings page labels as part of this slice unless needed for the restart-required message.
-
-For consistency, the Initial Setup wizard should use friendly labels and descriptions instead of raw setting names. Suggested labels:
-
-- `media_data_location`: "Media data location" — "Path visible to Pace Downloader where organized One Pace files will be placed."
-- `qbt_hostname`: "qBittorrent Web UI URL" — "URL Pace Downloader uses to reach qBittorrent."
-- `qbt_username`: "qBittorrent username"
-- `qbt_password`: "qBittorrent password"
-- `qbt_path_remote`: "Remote path reported by qBittorrent" — "Path prefix qBittorrent reports for downloaded files, such as `/downloads`."
-- `qbt_path_local`: "Path visible to Pace Downloader" — "Matching path prefix Pace Downloader can read, such as `/data/torrents/downloads`."
-- `qbt_category`: "qBittorrent category"
-- `qbt_download_location`: "qBittorrent download location"
-- `qbt_polling_rate`: "Polling rate"
-- `log_level`: "Log level"
-
-### Steps
+Steps:
 
 1. Keep a snapshot of loaded setting values before edits.
 2. On save success, compare submitted values with the loaded snapshot.
-3. If any **Restart-Applied Setting** changed, show **Restart Required** instead of only "Settings saved."
-4. The message should tell Docker Compose users to restart the backend/app container.
+3. If any restart-applied setting changed, show **Restart Required** instead of only "Settings saved."
+4. Tell Docker Compose users to restart the backend/app container.
 5. Do not block saving non-restart settings.
 
-### Acceptance Criteria
+Acceptance criteria:
 
 - Changing qBittorrent connection fields shows **Restart Required** after save.
 - Changing media data location shows **Restart Required** after save.
@@ -458,85 +451,16 @@ For consistency, the Initial Setup wizard should use friendly labels and descrip
 - Password masking does not produce false positives when the value is the unchanged masked placeholder.
 - Environment-overridden settings remain disabled as today.
 
-### Tests
+Validation:
 
-- Frontend build.
-- Manual check:
-  - qBittorrent hostname changed -> restart message
-  - prefer extended changed only -> saved message
-  - env-overridden field disabled
+- Run frontend build.
+- Manual check restart vs non-restart settings.
 
-## Slice 7: Backend Boot Tolerance
+### Milestone 7: Runtime Placement Error Surfacing
 
-### Goal
+Make runtime path mapping or media placement failures visible instead of only logging them.
 
-Allow backend to start when setup is incomplete.
-
-### Ownership
-
-Backend startup path and qBittorrent initialization.
-
-### Candidate Files
-
-- `backend/main.py`
-- `backend/qbittorrent.py`
-- `backend/dependencies.py`
-- `backend/download_manager.py`
-- `backend/api.py`
-- backend tests
-
-### Current Problem
-
-`main.py` currently performs startup work that assumes settings/qBittorrent are already valid. That conflicts with **Initial Setup**.
-
-### Desired Behavior
-
-Backend should start even when:
-
-- `media_data_location` is empty
-- `qbt_hostname` is empty
-- qBittorrent is unavailable
-
-Routes that require qBittorrent/download manager should return a clear setup/config error until configured.
-
-### Suggested Approach
-
-1. Initialize DB and logging as today.
-2. Build setup status at boot.
-3. If setup incomplete:
-   - skip metadata sync that requires media path
-   - skip qBittorrent client construction
-   - skip download manager polling/startup scan
-4. Keep `/health`, `/settings`, `/setup/status`, and `/setup/validate/*` working.
-5. After settings are saved, require a manual container/backend restart for v1.
-6. Do not add in-process qBittorrent/download-manager reinitialization in this feature slice.
-
-For v1, the setup wizard should save config and then tell the user to restart the container. Live lifecycle management is deferred to a future feature because it needs careful handling for polling tasks, startup scans, and active requests.
-
-### Acceptance Criteria
-
-- Backend starts with empty settings DB.
-- Setup endpoints work before qBittorrent is configured.
-- Download routes return clear error when download manager is unavailable.
-- No polling loop starts without a configured qBittorrent client.
-
-### Tests
-
-- Backend test for startup/init path with incomplete settings.
-- API test for setup endpoint availability when setup incomplete.
-- API test for qBittorrent-required route error shape.
-
-## Slice 8: Runtime Placement Error Surfacing
-
-### Goal
-
-When path mapping or media placement fails at runtime, expose a clear error instead of silently retrying every poll.
-
-### Ownership
-
-Backend download manager status/error handling and frontend display if needed.
-
-### Candidate Files
+Files to consider:
 
 - `backend/download_manager.py`
 - `backend/db.py`
@@ -544,103 +468,52 @@ Backend download manager status/error handling and frontend display if needed.
 - `frontend/src/routes/(app)/downloads/+page.svelte`
 - SSE status handling
 
-### Current Behavior
+Desired behavior when `_add_episode_to_data_location()` fails:
 
-Placement errors in `poll_downloads()` are caught and logged, but episode status is not marked `error`.
+- Mark episode download as `error`.
+- Store or expose a useful error message if the current schema supports it.
+- Broadcast an SSE status update.
+- Keep the poller alive.
 
-### Desired Behavior
-
-When `_add_episode_to_data_location()` fails:
-
-- mark episode download as `error`
-- optionally store error message
-- broadcast SSE status update
-- keep poller alive
-
-### Acceptance Criteria
+Acceptance criteria:
 
 - Bad qBittorrent path mapping produces visible error status.
 - Poller does not crash.
 - Error is not swallowed as only a log line.
 - Existing happy path still hardlinks/copies as before.
 
-### Tests
+Validation:
 
-- Unit test for failed placement marks episode `error`.
-- Unit test for poller event on placement failure.
-- Frontend manual check if UI already supports `Error` status.
+- Add or update unit tests for failed placement marking episode `error`.
+- Add or update unit tests for poller event on placement failure.
+- Manually check downloads UI if the existing UI supports `Error` status.
 
-## Slice 9: Final Integration Pass
+## Final Integration Checklist
 
-### Goal
+Use a fresh DB or reset settings, then verify:
 
-Verify **Initial Setup** end to end.
+1. Backend starts.
+2. Frontend starts.
+3. Visiting an app route redirects to `/setup`.
+4. Wizard loads current/default settings.
+5. Media validation works.
+6. qBittorrent validation works.
+7. Empty path mapping validates.
+8. One-sided path mapping fails.
+9. Settings save succeeds.
+10. Restart-required completion screen appears.
+11. Backend/container restart applies settings.
+12. App routes load.
+13. Download-manager routes behave normally after restart.
+14. No auth fields appear.
+15. No secrets are displayed in logs or UI.
+16. Dark/light UI both remain acceptable.
 
-### Steps
+## Working Notes
 
-1. Reset or use fresh DB.
-2. Start backend.
-3. Start frontend.
-4. Visit app route.
-5. Confirm redirect to `/setup`.
-6. Fill wizard with valid media path and qBittorrent config.
-7. Validate each step.
-8. Save settings.
-9. Confirm restart-required completion screen appears.
-10. Restart backend/container manually.
-11. Confirm app route loads.
-12. Confirm health/download routes behave.
-
-### Acceptance Criteria
-
-- First-run user has clear path from empty config to app usage.
-- No auth fields appear.
-- No redirect loops.
-- No secrets in logs or UI.
-- Dark/light UI both acceptable.
-
-## Agent Coordination Rules
-
-- Keep each slice in one PR/commit when possible.
-- Do not mix backend boot refactor with frontend form wiring.
-- Do not regenerate OpenAPI types unless backend is running and API contract changed.
-- Do not hand-edit generated OpenAPI types.
-- Do not revert unrelated worktree changes.
-- If a slice touches both backend and frontend, update tests/build for both.
-- Prefer existing app UI patterns over new styling systems.
-
-## Suggested Parallelization
-
-Safe parallel work:
-
-- Slice 1 and Slice 2 can be done together if backend is running.
-- Slice 3 and Slice 4 should usually be sequential.
-- Slice 6 can run in parallel with setup wizard work if write scopes stay settings-page-only.
-- Slice 7 can run in parallel with frontend work if write scopes stay backend-only.
-- Slice 8 can run after Slice 7 or independently if scoped carefully.
-
-Avoid parallel work:
-
-- Multiple agents editing `SetupWizard.svelte`.
-- Multiple agents editing `backend/download_manager.py`.
-- API contract changes while another agent regenerates frontend types.
-
-## Open Questions
-
-- Should setup status require qBittorrent credentials, or only hostname plus successful validation during wizard?
-- Should validation responses ever use non-200 status codes, or keep `ok: false` for all user-correctable setup failures?
-- Should runtime placement errors store full exception text in DB, or only a generic user-safe message?
-
-## Definition Of Done
-
-Feature is done when:
-
-- Backend starts on first run with incomplete config.
-- `/setup` validates and saves required settings.
-- App routes redirect to setup only when required.
-- Restart-required state gives clear manual restart instructions.
-- Normal app usage works after manual backend/container restart.
-- Invalid media/qBittorrent/path inputs produce useful messages.
-- Runtime placement failures surface as visible errors.
-- Backend tests pass.
-- Frontend build passes.
+- Keep changes small and coherent.
+- Prefer existing route-local fetch patterns over new shared client abstractions.
+- Keep backend and frontend terminology aligned.
+- Regenerate OpenAPI types only after backend contract changes.
+- Do not hand-edit generated API types.
+- Do not mix runtime placement-error handling into the wizard milestones unless needed for a specific bug.
