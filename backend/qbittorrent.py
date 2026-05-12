@@ -4,7 +4,7 @@ from enum import Enum
 
 import qbittorrentapi
 from qbittorrentapi import TorrentDictionary
-from db import get_settings
+from app_settings import get_settings
 from logging_config import get_logger
 
 logger = get_logger(__name__)

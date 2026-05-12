@@ -5,7 +5,7 @@ import requests
 from requests.exceptions import RequestException
 
 from date_utils import parse_iso_date
-from db import get_settings
+from app_settings import get_settings
 from logging_config import get_logger
 from pynyaasi.nyaasi import NyaaSiClient
 

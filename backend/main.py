@@ -10,12 +10,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import db
+import app_settings
 from logging_config import get_logger, setup_logging
 
 # Initialize database and logging before other imports that may log
 db.initialize_db()
-settings = db.get_settings()
-log_level = settings["log_level"]["value"] if settings else "INFO"
+log_level = app_settings.get_setting_value("log_level") or "INFO"
 setup_logging(log_level)
 
 logger = get_logger(__name__)
@@ -29,13 +29,18 @@ from events import downloads_broadcaster, metadata_broadcaster
 
 logger.info("Starting Pace Downloader backend")
 
-media_location_value = settings["media_data_location"]["value"] if settings else ""
-media_location = Path(media_location_value) if media_location_value else None
-refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
+initial_setup_required = app_settings.is_initial_setup_required()
 
-qbt_client = QbittorrentClient()
-download_manager = DownloadManager(qbt_client)
-set_download_manager(download_manager)
+if initial_setup_required:
+    logger.warning("Initial setup is required; skipping qBittorrent client, download manager, polling, and startup scan")
+else:
+    logger.info("Initial setup is complete; initializing qBittorrent client and download manager")
+    media_location_value = app_settings.get_setting_value("media_data_location")
+    media_location = Path(media_location_value) if media_location_value else None
+    refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
+    qbt_client = QbittorrentClient()
+    download_manager = DownloadManager(qbt_client)
+    set_download_manager(download_manager)
 
 
 async def _startup_scan():
@@ -53,8 +58,9 @@ async def _startup_scan():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await download_manager.start_polling()
-    asyncio.create_task(_startup_scan())
+    if not initial_setup_required:
+        await download_manager.start_polling()
+        asyncio.create_task(_startup_scan())
     yield
     downloads_broadcaster.close()
     metadata_broadcaster.close()

@@ -31,6 +31,7 @@ from setup_validation import (
     validate_qbittorrent_connection,
 )
 import db
+import app_settings
 router = APIRouter()
 logger = get_logger(__name__)
 
@@ -143,8 +144,9 @@ async def download_episode_route(episode_id: int, dm: DownloadManager = Depends(
         raise HTTPException(status_code=409, detail=f"Episode {episode_id} is already downloading")
 
     try:
-        settings = db.get_settings()
-        prefer_extended = settings["prefer_extended"]["value"] if settings else True
+        prefer_extended = app_settings.get_setting_value("prefer_extended")
+        if prefer_extended is None:
+            prefer_extended = True
         await asyncio.to_thread(dm.download_episode, episode_id, prefer_extended)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -259,8 +261,9 @@ async def download_season_route(season_num: int, dm: DownloadManager = Depends(g
     season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
-    settings = db.get_settings()
-    prefer_extended = settings["prefer_extended"]["value"] if settings else True
+    prefer_extended = app_settings.get_setting_value("prefer_extended")
+    if prefer_extended is None:
+        prefer_extended = True
     for ep in season_episodes:
         info = dm.get_episode_info(ep["id"])
         if info and info["status"] in ("pending", "downloading", "paused", "hardlink", "copy", "completed"):
@@ -354,7 +357,7 @@ async def remove_torrent_route(infohash: str, dm: DownloadManager = Depends(get_
 
 @router.get("/settings", response_model=SettingsResponse)
 def get_settings_route():
-    settings = db.get_settings()
+    settings = app_settings.get_settings()
     if settings is None:
         raise HTTPException(status_code=500, detail="Settings not found")
     if settings.get("qbt_password", {}).get("value"):
@@ -366,7 +369,7 @@ def get_settings_route():
 def save_settings_route(req: SettingsSaveRequest):
     if req.qbt_polling_rate < 5:
         raise HTTPException(status_code=422, detail="Polling rate must be at least 5 seconds")
-    db.save_settings(
+    app_settings.save_settings(
         media_data_location=req.media_data_location,
         qbt_hostname=req.qbt_hostname,
         qbt_username=req.qbt_username,
@@ -379,13 +382,13 @@ def save_settings_route(req: SettingsSaveRequest):
         qbt_polling_rate=req.qbt_polling_rate,
         log_level=req.log_level,
     )
-    settings = db.get_settings()
+    settings = app_settings.get_settings()
     return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
 
 
 @router.get("/setup/status", response_model=SetupStatusResponse)
 def get_setup_status_route():
-    settings = db.get_settings()
+    settings = app_settings.get_settings()
     if settings is None:
         raise HTTPException(status_code=500, detail="Settings not found")
     return build_setup_status(settings)
@@ -425,8 +428,7 @@ async def scan_existing_episodes_route(dm: DownloadManager = Depends(get_downloa
 
 @router.post("/metadata/sync", response_model=MetadataSyncResponse)
 async def sync_metadata_route():
-    settings = db.get_settings()
-    media_location_value = settings["media_data_location"]["value"] if settings else ""
+    media_location_value = app_settings.get_setting_value("media_data_location")
     if not media_location_value:
         raise HTTPException(status_code=422, detail="Media data location is not configured")
 

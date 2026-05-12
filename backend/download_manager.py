@@ -8,6 +8,7 @@ from metadata import get_episodes
 from release_resolver import resolve_episode_release
 from logging_config import get_logger
 from events import downloads_broadcaster
+import app_settings
 import db
 
 logger = get_logger(__name__)
@@ -375,7 +376,7 @@ class DownloadManager:
         return events
 
     async def start_polling(self):
-        settings = db.get_settings()
+        settings = app_settings.get_settings()
         interval = settings["qbt_polling_rate"]["value"] if settings else 10
         logger.info("Starting download polling with interval %ds", interval)
         asyncio.create_task(self._poll_loop(interval))
@@ -405,7 +406,7 @@ class DownloadManager:
         already_tracked: list[dict] = []
         errors: list[dict] = []
 
-        settings = db.get_settings()
+        settings = app_settings.get_settings()
         if not settings:
             logger.warning("Scan: no settings found, aborting")
             return {"found": found, "already_tracked": already_tracked, "errors": errors}
@@ -632,7 +633,7 @@ class DownloadManager:
         return status
 
     def _translate_file_path(self, file_path: str) -> str:
-        settings = db.get_settings()
+        settings = app_settings.get_settings()
         if not settings:
             return file_path
 
