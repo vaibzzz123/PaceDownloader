@@ -30,17 +30,21 @@ from events import downloads_broadcaster, metadata_broadcaster
 logger.info("Starting Pace Downloader backend")
 
 initial_setup_required = app_settings.is_initial_setup_required()
+download_manager: DownloadManager | None = None
 
 if initial_setup_required:
     logger.warning("Initial setup is required; skipping qBittorrent client, download manager, polling, and startup scan")
 else:
     logger.info("Initial setup is complete; initializing qBittorrent client and download manager")
-    media_location_value = app_settings.get_setting_value("media_data_location")
-    media_location = Path(media_location_value) if media_location_value else None
-    refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
-    qbt_client = QbittorrentClient()
-    download_manager = DownloadManager(qbt_client)
-    set_download_manager(download_manager)
+    try:
+        media_location_value = app_settings.get_setting_value("media_data_location")
+        media_location = Path(media_location_value) if media_location_value else None
+        refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
+        qbt_client = QbittorrentClient()
+        download_manager = DownloadManager(qbt_client)
+        set_download_manager(download_manager)
+    except Exception as e:
+        logger.warning("Download services are unavailable; setup and settings routes remain available: %s", e)
 
 
 async def _startup_scan():
@@ -58,7 +62,8 @@ async def _startup_scan():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not initial_setup_required:
+    # This accounts for case where initial setup is done but qbt is unreachable
+    if download_manager is not None:
         await download_manager.start_polling()
         asyncio.create_task(_startup_scan())
     yield
