@@ -4,6 +4,16 @@
   import CheckIcon from '@lucide/svelte/icons/check';
   import { Steps } from '@skeletonlabs/skeleton-svelte';
 
+  import type { components } from '$lib/types/api';
+
+  type SettingsResponse = components['schemas']['SettingsResponse'];
+
+  type Props = {
+    settings: SettingsResponse;
+  };
+
+  let { settings }: Props = $props();
+
   type Step = {
     id: string;
     title: string;
