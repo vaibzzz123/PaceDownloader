@@ -70,8 +70,9 @@ The frontend currently keeps API calls close to the route using them:
 For setup, follow that pattern:
 
 - Add `frontend/src/routes/setup/+page.server.ts`.
-- Fetch `/settings` and `/setup/status` there.
-- Pass `data.settings` and `data.setupStatus` into `SetupWizard`.
+- Fetch `/settings` there.
+- Pass `data.settings` into `SetupWizard`.
+- Do not fetch `/setup/status` on the setup page unless the wizard grows a concrete UI need for backend-derived setup state.
 - Keep setup validation and save helpers local to `SetupWizard.svelte` unless another route starts reusing them.
 
 ## API Contract
@@ -262,15 +263,15 @@ Steps:
 
 1. Add `frontend/src/routes/setup/+page.server.ts`.
 2. Fetch `GET /settings`.
-3. Fetch `GET /setup/status`.
-4. Type responses using `$lib/types/api`.
-5. Return `{ settings, setupStatus }`.
-6. Pass those values from `+page.svelte` into `SetupWizard`.
+3. Type the response using `$lib/types/api`.
+4. Return `{ settings }`.
+5. Pass `data.settings` from `+page.svelte` into `SetupWizard`.
+
+Do not fetch `GET /setup/status` in this milestone. The setup page only needs current saved settings as initial form values. Setup status is more relevant to redirect guards and app-wide setup state.
 
 Acceptance criteria:
 
 - Setup page has current settings available as initial form values.
-- Setup page has setup status available for initial step completion/error state.
 - Failed server-load requests produce useful SvelteKit errors.
 
 Validation:
@@ -391,6 +392,7 @@ Preferred behavior:
 
 - `/setup` is always accessible.
 - App route group checks `GET /setup/status`.
+- `/setup/status` is the source of truth for deciding whether app routes should redirect to setup.
 - If `required === true`, redirect to `/setup`.
 - If setup config is complete and backend has restarted, app routes proceed.
 - If setup config is complete but the download manager/runtime is unavailable, show restart-required state instead of treating the app as ready.
