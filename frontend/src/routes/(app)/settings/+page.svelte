@@ -5,35 +5,17 @@
 
   let { data }: PageProps = $props();
 
-  let form = $state({
-    media_data_location: (data.settings.media_data_location.value as string) ?? '',
-    prefer_extended: Boolean(data.settings.prefer_extended.value),
-    qbt_hostname: (data.settings.qbt_hostname.value as string) ?? '',
-    qbt_username: (data.settings.qbt_username.value as string) ?? '',
-    qbt_password: (data.settings.qbt_password.value as string) ?? '',
-    qbt_path_local: (data.settings.qbt_path_local.value as string) ?? '',
-    qbt_path_remote: (data.settings.qbt_path_remote.value as string) ?? '',
-    qbt_category: (data.settings.qbt_category.value as string) ?? '',
-    qbt_download_location: (data.settings.qbt_download_location.value as string) ?? '',
-    qbt_polling_rate: (data.settings.qbt_polling_rate.value as number) ?? 8,
-    log_level: (data.settings.log_level.value as string) ?? 'INFO',
-  });
-
-  // Need to do things this way so that the form is updated when the page is reloaded
-  // TODO: Find a better way to do all of this, feels way too hacky for something relatively simple
-  $effect(() => {
-    form.media_data_location = (data.settings.media_data_location.value as string) ?? '';
-    form.prefer_extended = Boolean(data.settings.prefer_extended.value);
-    form.qbt_hostname = (data.settings.qbt_hostname.value as string) ?? '';
-    form.qbt_username = (data.settings.qbt_username.value as string) ?? '';
-    form.qbt_password = (data.settings.qbt_password.value as string) ?? '';
-    form.qbt_path_local = (data.settings.qbt_path_local.value as string) ?? '';
-    form.qbt_path_remote = (data.settings.qbt_path_remote.value as string) ?? '';
-    form.qbt_category = (data.settings.qbt_category.value as string) ?? '';
-    form.qbt_download_location = (data.settings.qbt_download_location.value as string) ?? '';
-    form.qbt_polling_rate = (data.settings.qbt_polling_rate.value as number) ?? 8;
-    form.log_level = (data.settings.log_level.value as string) ?? 'INFO';
-  });
+  let mediaDataLocation = $derived((data.settings.media_data_location.value as string) ?? '');
+  let preferExtended = $derived(Boolean(data.settings.prefer_extended.value));
+  let qbtHostname = $derived((data.settings.qbt_hostname.value as string) ?? '');
+  let qbtUsername = $derived((data.settings.qbt_username.value as string) ?? '');
+  let qbtPassword = $derived((data.settings.qbt_password.value as string) ?? '');
+  let qbtPathLocal = $derived((data.settings.qbt_path_local.value as string) ?? '');
+  let qbtPathRemote = $derived((data.settings.qbt_path_remote.value as string) ?? '');
+  let qbtCategory = $derived((data.settings.qbt_category.value as string) ?? '');
+  let qbtDownloadLocation = $derived((data.settings.qbt_download_location.value as string) ?? '');
+  let qbtPollingRate = $derived((data.settings.qbt_polling_rate.value as number) ?? 8);
+  let logLevel = $derived((data.settings.log_level.value as string) ?? 'INFO');
 
   let saveError = $state<string | null>(null);
   let saving = $state(false);
@@ -48,17 +30,17 @@
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          media_data_location: form.media_data_location,
-          prefer_extended: form.prefer_extended,
-          qbt_hostname: form.qbt_hostname,
-          qbt_username: form.qbt_username,
-          qbt_password: form.qbt_password,
-          qbt_path_local: form.qbt_path_local || null,
-          qbt_path_remote: form.qbt_path_remote || null,
-          qbt_category: form.qbt_category || null,
-          qbt_download_location: form.qbt_download_location || null,
-          qbt_polling_rate: form.qbt_polling_rate,
-          log_level: form.log_level,
+          media_data_location: mediaDataLocation,
+          prefer_extended: preferExtended,
+          qbt_hostname: qbtHostname,
+          qbt_username: qbtUsername,
+          qbt_password: qbtPassword,
+          qbt_path_local: qbtPathLocal || null,
+          qbt_path_remote: qbtPathRemote || null,
+          qbt_category: qbtCategory || null,
+          qbt_download_location: qbtDownloadLocation || null,
+          qbt_polling_rate: qbtPollingRate,
+          log_level: logLevel,
         }),
       });
       if (!res.ok) {
@@ -99,9 +81,9 @@
         Media Data Location
       </span>
       <input
-        class="input w-80"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-80"
         type="text"
-        bind:value={form.media_data_location}
+        bind:value={mediaDataLocation}
         disabled={data.settings.media_data_location.env_override}
       />
       {#if data.settings.media_data_location.env_override}{@render envChip()}{/if}
@@ -111,9 +93,9 @@
         Prefer Extended
       </span>
       <input
-        class="checkbox"
+        class="checkbox disabled:cursor-not-allowed disabled:opacity-60"
         type="checkbox"
-        bind:checked={form.prefer_extended}
+        bind:checked={preferExtended}
         disabled={data.settings.prefer_extended.env_override}
       />
       {#if data.settings.prefer_extended.env_override}{@render envChip()}{/if}
@@ -122,7 +104,7 @@
       <span class="label-text flex items-center gap-2">
         Log Level
       </span>
-      <select class="select pl-3" bind:value={form.log_level} disabled={data.settings.log_level.env_override}>
+      <select class="select border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 pl-3" bind:value={logLevel} disabled={data.settings.log_level.env_override}>
         <option value="DEBUG">DEBUG</option>
         <option value="INFO">INFO</option>
         <option value="WARNING">WARNING</option>
@@ -139,9 +121,9 @@
         Hostname
       </span>
       <input
-        class="input w-80"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-80"
         type="text"
-        bind:value={form.qbt_hostname}
+        bind:value={qbtHostname}
         disabled={data.settings.qbt_hostname.env_override}
       />
       {#if data.settings.qbt_hostname.env_override}{@render envChip()}{/if}
@@ -151,9 +133,9 @@
         Username
       </span>
       <input
-        class="input w-80"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-80"
         type="text"
-        bind:value={form.qbt_username}
+        bind:value={qbtUsername}
         disabled={data.settings.qbt_username.env_override}
       />
       {#if data.settings.qbt_username.env_override}{@render envChip()}{/if}
@@ -164,9 +146,9 @@
       </span>
       <!-- Need autocomplete="new-password" to prevent password manager from trying to save the password -->
       <input
-        class="input w-80"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-80"
         type="password"
-        bind:value={form.qbt_password}
+        bind:value={qbtPassword}
         disabled={data.settings.qbt_password.env_override}
         autocomplete="new-password"
       />
@@ -178,16 +160,16 @@
       </span>
       <div class="flex items-center gap-2">
         <input
-          class="input w-96"
+          class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-96"
           type="text"
-          bind:value={form.qbt_path_local}
+          bind:value={qbtPathLocal}
           disabled={data.settings.qbt_path_local.env_override}
         />
         <span class="font-bold">→</span>
         <input
-          class="input w-96"
+          class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-96"
           type="text"
-          bind:value={form.qbt_path_remote}
+          bind:value={qbtPathRemote}
           disabled={data.settings.qbt_path_remote.env_override}
         />
       </div>
@@ -198,9 +180,9 @@
         Category
       </span>
       <input
-        class="input w-80"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-80"
         type="text"
-        bind:value={form.qbt_category}
+        bind:value={qbtCategory}
         disabled={data.settings.qbt_category.env_override}
       />
       {#if data.settings.qbt_category.env_override}{@render envChip()}{/if}
@@ -210,9 +192,9 @@
         Download Location
       </span>
       <input
-        class="input w-80"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-80"
         type="text"
-        bind:value={form.qbt_download_location}
+        bind:value={qbtDownloadLocation}
         disabled={data.settings.qbt_download_location.env_override}
       />
       {#if data.settings.qbt_download_location.env_override}{@render envChip()}{/if}
@@ -222,10 +204,10 @@
         Polling Rate (s)
       </span>
       <input
-        class="input w-24"
+        class="input border border-surface-600 bg-surface-50-950 text-surface-950-50 placeholder:text-black/40 dark:placeholder:text-white/40 disabled:cursor-not-allowed disabled:bg-surface-100-900 disabled:text-surface-950-50 disabled:opacity-100 w-24"
         type="number"
         min="5"
-        bind:value={form.qbt_polling_rate}
+        bind:value={qbtPollingRate}
         disabled={data.settings.qbt_polling_rate.env_override}
       />
       {#if data.settings.qbt_polling_rate.env_override}{@render envChip()}{/if}
