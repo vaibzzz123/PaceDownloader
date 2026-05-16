@@ -243,6 +243,28 @@ def test_validate_qbittorrent_connection_rejects_failed_login_status(mock_sessio
     mock_session.get.assert_not_called()
 
 
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_reports_banned_client(mock_session_class):
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    login_response = MagicMock(
+        status_code=403,
+        text="Your IP address has been banned after too many failed authentication attempts.",
+    )
+    mock_session.post.return_value = login_response
+
+    result = validate_qbittorrent_connection("http://qbittorrent:8080")
+
+    assert result.ok is False
+    assert result.message == (
+        "qBittorrent temporarily banned this client after failed login attempts. "
+        "Wait for the ban to expire or restart qBittorrent, then try again."
+    )
+    assert result.details["status_code"] == 403
+    login_response.raise_for_status.assert_not_called()
+    mock_session.get.assert_not_called()
+
+
 def test_validate_setup_media_route_matches_request_model(tmp_path):
     from api import validate_setup_media_route
 

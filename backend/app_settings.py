@@ -12,6 +12,10 @@ def get_setting_value(field: str) -> Any:
     return _setting_value(settings, field)
 
 
+def get_stored_setting_value(field: str) -> Any:
+    return db.get_stored_setting_value(field)
+
+
 def is_initial_setup_required() -> bool:
     settings = get_settings()
     media_location_value = _setting_value(settings, "media_data_location")

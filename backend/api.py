@@ -34,6 +34,7 @@ import db
 import app_settings
 router = APIRouter()
 logger = get_logger(__name__)
+MASKED_PASSWORD = "********"
 
 _STATUS_MAP = {
     "pending":     "Pending",
@@ -45,6 +46,16 @@ _STATUS_MAP = {
     "error":       "Error",
     "imported":    "Imported",
 }
+
+
+def construct_settings_response_with_masked_password(settings: dict) -> SettingsResponse:
+    response_settings = {
+        key: dict(value)
+        for key, value in settings.items()
+    }
+    if response_settings.get("qbt_password", {}).get("value"):
+        response_settings["qbt_password"]["value"] = MASKED_PASSWORD
+    return SettingsResponse(**{k: SettingField(**v) for k, v in response_settings.items()})
 
 @router.get("/health")
 async def health():
@@ -360,20 +371,21 @@ def get_settings_route():
     settings = app_settings.get_settings()
     if settings is None:
         raise HTTPException(status_code=500, detail="Settings not found")
-    if settings.get("qbt_password", {}).get("value"):
-        settings["qbt_password"]["value"] = "********"
-    return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
+    return construct_settings_response_with_masked_password(settings)
 
 
 @router.put("/settings", response_model=SettingsResponse)
 def save_settings_route(req: SettingsSaveRequest):
     if req.qbt_polling_rate < 5:
         raise HTTPException(status_code=422, detail="Polling rate must be at least 5 seconds")
+    qbt_password = req.qbt_password
+    if qbt_password == MASKED_PASSWORD:
+        qbt_password = app_settings.get_stored_setting_value("qbt_password") or ""
     app_settings.save_settings(
         media_data_location=req.media_data_location,
         qbt_hostname=req.qbt_hostname,
         qbt_username=req.qbt_username,
-        qbt_password=req.qbt_password,
+        qbt_password=qbt_password,
         prefer_extended=req.prefer_extended,
         qbt_path_local=req.qbt_path_local,
         qbt_path_remote=req.qbt_path_remote,
@@ -383,7 +395,7 @@ def save_settings_route(req: SettingsSaveRequest):
         log_level=req.log_level,
     )
     settings = app_settings.get_settings()
-    return SettingsResponse(**{k: SettingField(**v) for k, v in settings.items()})
+    return construct_settings_response_with_masked_password(settings)
 
 
 @router.get("/setup/status", response_model=SetupStatusResponse)
@@ -401,11 +413,14 @@ def validate_setup_media_route(req: SetupMediaValidationRequest):
 
 @router.post("/setup/validate/qbittorrent", response_model=SetupValidationResponse)
 async def validate_setup_qbittorrent_route(req: SetupQbittorrentValidationRequest):
+    qbt_password = req.qbt_password
+    if qbt_password == MASKED_PASSWORD:
+        qbt_password = app_settings.get_setting_value("qbt_password") or ""
     return await asyncio.to_thread(
         validate_qbittorrent_connection,
         req.qbt_hostname,
         req.qbt_username,
-        req.qbt_password,
+        qbt_password,
     )
 
 

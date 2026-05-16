@@ -369,6 +369,17 @@ def get_settings() -> dict | None:
     return result
 
 
+def get_stored_setting_value(field: str) -> Any:
+    if field not in SETTINGS_FIELDS:
+        raise ValueError(f"Unknown setting field: {field}")
+
+    with get_db() as con:
+        row = con.execute("SELECT * FROM settings WHERE singleton = 1").fetchone()
+        if not row:
+            return None
+        return row[field]
+
+
 def save_settings(
     media_data_location: str,
     qbt_hostname: str,

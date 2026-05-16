@@ -158,6 +158,12 @@ def validate_qbittorrent_connection(
             timeout=QBT_VALIDATION_TIMEOUT_SECONDS,
         )
         if login_response.status_code in {401, 403}:
+            if "banned" in login_response.text.lower():
+                return SetupValidationResponse(
+                    ok=False,
+                    message="qBittorrent temporarily banned this client after failed login attempts. Wait for the ban to expire or restart qBittorrent, then try again.",
+                    details={"status_code": login_response.status_code},
+                )
             return SetupValidationResponse(
                 ok=False,
                 message="Could not connect to qBittorrent: login failed",
