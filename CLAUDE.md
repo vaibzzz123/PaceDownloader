@@ -131,6 +131,7 @@ frontend/src/
 
 **Key frontend patterns:**
 - Server-side data fetching via `+page.server.ts` files calling the FastAPI backend
+- Client-side API calls stay in route `+page.svelte` files; reusable components receive typed data and callback props instead of importing backend URLs or calling endpoints directly
 - ColorTable uses Svelte 5 snippets for flexible cell/header rendering while staying abstract
 - URL query params used for tab navigation and row highlighting (no page re-renders)
 - Global state uses Svelte 5 runes with a blocking script for early localStorage injection

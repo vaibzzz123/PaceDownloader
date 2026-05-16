@@ -4,7 +4,6 @@
   import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
   import CheckIcon from '@lucide/svelte/icons/check';
   import { Steps } from '@skeletonlabs/skeleton-svelte';
-  import { PUBLIC_BACKEND_URL } from '$env/static/public';
 
   import type { components } from '$lib/types/api';
 
@@ -14,12 +13,22 @@
   type SetupPathMappingValidationRequest =
     components['schemas']['SetupPathMappingValidationRequest'];
   type SetupValidationResponse = components['schemas']['SetupValidationResponse'];
+  type SettingsSaveRequest = components['schemas']['SettingsSaveRequest'];
 
   type Props = {
     settings: SettingsResponse;
+    validateMedia: (payload: SetupMediaValidationRequest) => Promise<SetupValidationResponse>;
+    validateQbittorrent: (
+      payload: SetupQbittorrentValidationRequest
+    ) => Promise<SetupValidationResponse>;
+    validatePathMapping: (
+      payload: SetupPathMappingValidationRequest
+    ) => Promise<SetupValidationResponse>;
+    saveSettings: (payload: SettingsSaveRequest) => Promise<void>;
   };
 
-  let { settings }: Props = $props();
+  let { settings, validateMedia, validateQbittorrent, validatePathMapping, saveSettings }: Props =
+    $props();
 
   type Step = {
     id: string;
@@ -83,6 +92,8 @@
 
   let currentStep = $state(0);
   let validating = $state(false);
+  let saving = $state(false);
+  let saveError = $state<string | null>(null);
   let restartNoticeVisible = $state(false);
   let validationMessages = $state<Record<ValidationStepId, ValidationMessage | null>>({
     media: null,
@@ -92,72 +103,16 @@
 
   const isFinalStep = $derived(currentStep === steps.length);
 
-  // TODO: See how to simplify this text extraction from backend by making a simpler data structure
-  function validationTextFromBody(body: unknown, fallback: string): string {
-    if (body && typeof body === 'object' && 'detail' in body) {
-      const { detail } = body as { detail: unknown };
-
-      if (typeof detail === 'string') return detail;
-      if (Array.isArray(detail)) {
-        return detail
-          .map((item) => {
-            if (item && typeof item === 'object' && 'msg' in item) {
-              return String((item as { msg: unknown }).msg);
-            }
-            return String(item);
-          })
-          .join(' ');
-      }
-    }
-
-    if (body && typeof body === 'object' && 'message' in body) {
-      return String((body as { message: unknown }).message);
-    }
-
-    return fallback;
-  }
-
-  async function postValidation(
-    path: string,
-    payload: SetupMediaValidationRequest | SetupQbittorrentValidationRequest | SetupPathMappingValidationRequest
-  ): Promise<SetupValidationResponse> {
-    let response: Response;
-
-    try {
-      response = await fetch(`${PUBLIC_BACKEND_URL}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-    } catch {
-      throw new Error('Could not reach the server. Check that Pace Downloader backend is running.');
-    }
-
-    let body: unknown = null;
-
-    try {
-      body = await response.json();
-    } catch {
-      body = null;
-    }
-
-    if (!response.ok) {
-      throw new Error(validationTextFromBody(body, 'Validation failed. Please check this step.'));
-    }
-
-    return body as SetupValidationResponse;
-  }
-
   function setValidationMessage(stepId: ValidationStepId, message: ValidationMessage): boolean {
     validationMessages[stepId] = message;
     return message.kind === 'success';
   }
 
-  async function validateMedia(): Promise<boolean> {
+  async function validateMediaStep(): Promise<boolean> {
     validationMessages.media = null;
 
     try {
-      const result = await postValidation('/setup/validate/media', {
+      const result = await validateMedia({
         media_data_location: mediaDataLocation,
       });
 
@@ -173,11 +128,11 @@
     }
   }
 
-  async function validateQbittorrent(): Promise<boolean> {
+  async function validateQbittorrentStep(): Promise<boolean> {
     validationMessages.qbt = null;
 
     try {
-      const result = await postValidation('/setup/validate/qbittorrent', {
+      const result = await validateQbittorrent({
         qbt_hostname: qbtHostname,
         qbt_username: qbtUsername,
         qbt_password: qbtPassword,
@@ -195,7 +150,7 @@
     }
   }
 
-  async function validatePathMapping(): Promise<boolean> {
+  async function validatePathMappingStep(): Promise<boolean> {
     validationMessages.paths = null;
 
     const qbtPathLocalValue = qbtPathLocal.trim();
@@ -209,7 +164,7 @@
     }
 
     try {
-      const result = await postValidation('/setup/validate/path-mapping', {
+      const result = await validatePathMapping({
         qbt_path_local: qbtPathLocalValue || null,
         qbt_path_remote: qbtPathRemoteValue || null,
       });
@@ -229,9 +184,9 @@
   async function validateCurrentStep(): Promise<boolean> {
     const currentStepId = steps[currentStep]?.id;
 
-    if (currentStepId === 'media') return validateMedia();
-    if (currentStepId === 'qbt') return validateQbittorrent();
-    if (currentStepId === 'paths') return validatePathMapping();
+    if (currentStepId === 'media') return validateMediaStep();
+    if (currentStepId === 'qbt') return validateQbittorrentStep();
+    if (currentStepId === 'paths') return validatePathMappingStep();
 
     return true;
   }
@@ -261,8 +216,34 @@
     }
   }
 
-  function finishSetup(): void {
-    restartNoticeVisible = true;
+  async function finishSetup(): Promise<void> {
+    if (saving || restartNoticeVisible) return;
+
+    saving = true;
+    saveError = null;
+
+    const payload: SettingsSaveRequest = {
+      media_data_location: mediaDataLocation,
+      qbt_hostname: qbtHostname,
+      qbt_username: qbtUsername,
+      qbt_password: qbtPassword,
+      qbt_path_local: qbtPathLocal.trim() || null,
+      qbt_path_remote: qbtPathRemote.trim() || null,
+      qbt_category: qbtCategory.trim() || null,
+      qbt_download_location: qbtDownloadLocation.trim() || null,
+      qbt_polling_rate: Math.max(5, Number(qbtPollingRate) || 5),
+      log_level: logLevel,
+      prefer_extended: preferExtended,
+    };
+
+    try {
+      await saveSettings(payload);
+      restartNoticeVisible = true;
+    } catch (error) {
+      saveError = error instanceof Error ? error.message : 'Failed to save settings.';
+    } finally {
+      saving = false;
+    }
   }
 </script>
 
@@ -550,12 +531,19 @@
           <div>
             {#if restartNoticeVisible}
               <h2 class="text-xl font-semibold">Restart required</h2>
-              <p class="text-sm">Restart Pace Downloader to apply these settings.</p>
+              <p class="text-sm">
+                Restart the Pace Downloader backend or app container to apply these settings.
+              </p>
             {:else}
               <h2 class="text-xl font-semibold">Setup complete</h2>
               <p class="text-sm">Pace Downloader is ready to save these settings.</p>
             {/if}
           </div>
+          {#if saveError}
+            <div class="preset-tonal-error border-error-500 max-w-xl rounded border px-3 py-2 text-sm">
+              {saveError}
+            </div>
+          {/if}
         </div>
       </Steps.Content>
 
@@ -568,12 +556,12 @@
         <button
           type="button"
           class="btn preset-filled-primary-500"
-          disabled={validating || (isFinalStep && restartNoticeVisible)}
+          disabled={validating || saving || (isFinalStep && restartNoticeVisible)}
           onclick={() => (isFinalStep ? finishSetup() : goToStep(currentStep + 1))}
         >
           {#if isFinalStep}
             <CheckIcon class="size-4" />
-            <span>Finish</span>
+            <span>{saving ? 'Saving...' : 'Finish'}</span>
           {:else if validating}
             <span>Validating...</span>
           {:else}

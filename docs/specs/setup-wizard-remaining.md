@@ -63,7 +63,8 @@ Do not add `frontend/src/lib/api/setup.ts` for now.
 The frontend currently keeps API calls close to the route using them:
 
 - Initial page data is fetched in route-local `+page.server.ts` files.
-- Client-side actions use small local helpers inside the relevant `.svelte` page/component.
+- Client-side actions use small local helpers inside the relevant route `+page.svelte`.
+- Reusable components receive typed callback props for validation/save work instead of importing backend URLs or calling API endpoints directly.
 - API response shapes are typed with `components['schemas'][...]` from `$lib/types/api`.
 - Requests use `PUBLIC_BACKEND_URL`.
 
@@ -73,7 +74,7 @@ For setup, follow that pattern:
 - Fetch `/settings` there.
 - Pass `data.settings` into `SetupWizard`.
 - Do not fetch `/setup/status` on the setup page unless the wizard grows a concrete UI need for backend-derived setup state.
-- Keep setup validation and save helpers local to `SetupWizard.svelte` unless another route starts reusing them.
+- Keep setup validation and save helpers local to `frontend/src/routes/setup/+page.svelte`, and pass typed callbacks into `SetupWizard.svelte`.
 
 ## API Contract
 
