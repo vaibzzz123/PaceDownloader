@@ -4,10 +4,16 @@
   import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
   import CheckIcon from '@lucide/svelte/icons/check';
   import { Steps } from '@skeletonlabs/skeleton-svelte';
+  import { PUBLIC_BACKEND_URL } from '$env/static/public';
 
   import type { components } from '$lib/types/api';
 
   type SettingsResponse = components['schemas']['SettingsResponse'];
+  type SetupMediaValidationRequest = components['schemas']['SetupMediaValidationRequest'];
+  type SetupQbittorrentValidationRequest = components['schemas']['SetupQbittorrentValidationRequest'];
+  type SetupPathMappingValidationRequest =
+    components['schemas']['SetupPathMappingValidationRequest'];
+  type SetupValidationResponse = components['schemas']['SetupValidationResponse'];
 
   type Props = {
     settings: SettingsResponse;
@@ -55,6 +61,11 @@
   ] as const satisfies readonly Step[];
 
   type StepId = (typeof steps)[number]['id'];
+  type ValidationStepId = Extract<StepId, 'media' | 'qbt' | 'paths'>;
+  type ValidationMessage = {
+    kind: 'success' | 'error';
+    text: string;
+  };
 
   const setupSections = steps.filter((item) => item.id !== 'welcome' && item.id !== 'review');
 
@@ -70,9 +81,189 @@
   let qbtPollingRate = $derived((settings.qbt_polling_rate.value as number) ?? 10);
   let logLevel = $derived((settings.log_level.value as string) ?? 'INFO');
 
-  let step = $state(0);
+  let currentStep = $state(0);
+  let validating = $state(false);
+  let restartNoticeVisible = $state(false);
+  let validationMessages = $state<Record<ValidationStepId, ValidationMessage | null>>({
+    media: null,
+    qbt: null,
+    paths: null,
+  });
 
-  const isFinalStep = $derived(step === steps.length);
+  const isFinalStep = $derived(currentStep === steps.length);
+
+  // TODO: See how to simplify this text extraction from backend by making a simpler data structure
+  function validationTextFromBody(body: unknown, fallback: string): string {
+    if (body && typeof body === 'object' && 'detail' in body) {
+      const { detail } = body as { detail: unknown };
+
+      if (typeof detail === 'string') return detail;
+      if (Array.isArray(detail)) {
+        return detail
+          .map((item) => {
+            if (item && typeof item === 'object' && 'msg' in item) {
+              return String((item as { msg: unknown }).msg);
+            }
+            return String(item);
+          })
+          .join(' ');
+      }
+    }
+
+    if (body && typeof body === 'object' && 'message' in body) {
+      return String((body as { message: unknown }).message);
+    }
+
+    return fallback;
+  }
+
+  async function postValidation(
+    path: string,
+    payload: SetupMediaValidationRequest | SetupQbittorrentValidationRequest | SetupPathMappingValidationRequest
+  ): Promise<SetupValidationResponse> {
+    let response: Response;
+
+    try {
+      response = await fetch(`${PUBLIC_BACKEND_URL}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      throw new Error('Could not reach the server. Check that Pace Downloader backend is running.');
+    }
+
+    let body: unknown = null;
+
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(validationTextFromBody(body, 'Validation failed. Please check this step.'));
+    }
+
+    return body as SetupValidationResponse;
+  }
+
+  function setValidationMessage(stepId: ValidationStepId, message: ValidationMessage): boolean {
+    validationMessages[stepId] = message;
+    return message.kind === 'success';
+  }
+
+  async function validateMedia(): Promise<boolean> {
+    validationMessages.media = null;
+
+    try {
+      const result = await postValidation('/setup/validate/media', {
+        media_data_location: mediaDataLocation,
+      });
+
+      return setValidationMessage('media', {
+        kind: result.ok ? 'success' : 'error',
+        text: result.message,
+      });
+    } catch (error) {
+      return setValidationMessage('media', {
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Media validation failed.',
+      });
+    }
+  }
+
+  async function validateQbittorrent(): Promise<boolean> {
+    validationMessages.qbt = null;
+
+    try {
+      const result = await postValidation('/setup/validate/qbittorrent', {
+        qbt_hostname: qbtHostname,
+        qbt_username: qbtUsername,
+        qbt_password: qbtPassword,
+      });
+
+      return setValidationMessage('qbt', {
+        kind: result.ok ? 'success' : 'error',
+        text: result.message,
+      });
+    } catch (error) {
+      return setValidationMessage('qbt', {
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'qBittorrent validation failed.',
+      });
+    }
+  }
+
+  async function validatePathMapping(): Promise<boolean> {
+    validationMessages.paths = null;
+
+    const qbtPathLocalValue = qbtPathLocal.trim();
+    const qbtPathRemoteValue = qbtPathRemote.trim();
+
+    if (Boolean(qbtPathLocalValue) !== Boolean(qbtPathRemoteValue)) {
+      return setValidationMessage('paths', {
+        kind: 'error',
+        text: 'Enter both path mapping fields, or leave both empty.',
+      });
+    }
+
+    try {
+      const result = await postValidation('/setup/validate/path-mapping', {
+        qbt_path_local: qbtPathLocalValue || null,
+        qbt_path_remote: qbtPathRemoteValue || null,
+      });
+
+      return setValidationMessage('paths', {
+        kind: result.ok ? 'success' : 'error',
+        text: result.message,
+      });
+    } catch (error) {
+      return setValidationMessage('paths', {
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Path mapping validation failed.',
+      });
+    }
+  }
+
+  async function validateCurrentStep(): Promise<boolean> {
+    const currentStepId = steps[currentStep]?.id;
+
+    if (currentStepId === 'media') return validateMedia();
+    if (currentStepId === 'qbt') return validateQbittorrent();
+    if (currentStepId === 'paths') return validatePathMapping();
+
+    return true;
+  }
+
+  // TODO: This works fine for now, but feels a bit weird to have a blocking loop
+  async function goToStep(targetStep: number): Promise<void> {
+    if (validating) return;
+
+    if (targetStep <= currentStep) {
+      currentStep = targetStep;
+      return;
+    }
+
+    validating = true;
+
+    try {
+      while (currentStep < targetStep && currentStep < steps.length) {
+        const isValid = await validateCurrentStep();
+
+        if (!isValid) return;
+
+        currentStep += 1;
+        restartNoticeVisible = false;
+      }
+    } finally {
+      validating = false;
+    }
+  }
+
+  function finishSetup(): void {
+    restartNoticeVisible = true;
+  }
 </script>
 
 {#snippet envChip()}
@@ -82,6 +273,19 @@
   </span>
 {/snippet}
 
+{#snippet validationAlert(message: ValidationMessage)}
+  <div
+    class={[
+      'rounded border px-3 py-2 text-sm',
+      message.kind === 'success'
+        ? 'preset-tonal-success border-success-500'
+        : 'preset-tonal-error border-error-500',
+    ]}
+  >
+    {message.text}
+  </div>
+{/snippet}
+
 <section class="card bg-surface-100-900 mx-auto flex w-full max-w-244 flex-col gap-6 p-6 shadow-xl sm:p-8">
   <header class="flex flex-col gap-2">
     <p class="text-sm font-medium">Initial setup</p>
@@ -89,9 +293,9 @@
   </header>
 
   <Steps
-    {step}
+    step={currentStep}
     count={steps.length}
-    onStepChange={(details) => (step = details.step)}
+    onStepChange={(details) => goToStep(details.step)}
     class="flex w-full flex-col gap-5"
   >
     <Steps.List class="flex w-full flex-wrap items-center gap-y-2 lg:flex-nowrap">
@@ -144,6 +348,7 @@
                   {#if settings.media_data_location.env_override}{@render envChip()}{/if}
                 </label>
               </fieldset>
+              {#if validationMessages.media}{@render validationAlert(validationMessages.media)}{/if}
             {:else if item.id === 'qbt'}
               <fieldset class="grid gap-4 sm:grid-cols-2">
                 <label class="label sm:col-span-2">
@@ -185,6 +390,7 @@
                   {#if settings.qbt_password.env_override}{@render envChip()}{/if}
                 </label>
               </fieldset>
+              {#if validationMessages.qbt}{@render validationAlert(validationMessages.qbt)}{/if}
             {:else if item.id === 'paths'}
               <fieldset class="grid gap-4 sm:grid-cols-2">
                 <label class="label">
@@ -217,6 +423,7 @@
                   {#if settings.qbt_path_local.env_override}{@render envChip()}{/if}
                 </label>
               </fieldset>
+              {#if validationMessages.paths}{@render validationAlert(validationMessages.paths)}{/if}
             {:else if item.id === 'preferences'}
               <fieldset class="grid gap-4 sm:grid-cols-2">
                 <label class="label">
@@ -341,8 +548,13 @@
             <CheckIcon class="size-6" />
           </div>
           <div>
-            <h2 class="text-xl font-semibold">Setup complete</h2>
-            <p class="text-sm">Pace Downloader is ready to save these settings.</p>
+            {#if restartNoticeVisible}
+              <h2 class="text-xl font-semibold">Restart required</h2>
+              <p class="text-sm">Restart Pace Downloader to apply these settings.</p>
+            {:else}
+              <h2 class="text-xl font-semibold">Setup complete</h2>
+              <p class="text-sm">Pace Downloader is ready to save these settings.</p>
+            {/if}
           </div>
         </div>
       </Steps.Content>
@@ -353,15 +565,22 @@
           <span>Back</span>
         </Steps.PrevTrigger>
 
-        <Steps.NextTrigger class="btn preset-filled-primary-500">
+        <button
+          type="button"
+          class="btn preset-filled-primary-500"
+          disabled={validating || (isFinalStep && restartNoticeVisible)}
+          onclick={() => (isFinalStep ? finishSetup() : goToStep(currentStep + 1))}
+        >
           {#if isFinalStep}
             <CheckIcon class="size-4" />
             <span>Finish</span>
+          {:else if validating}
+            <span>Validating...</span>
           {:else}
             <span>Next</span>
             <ArrowRightIcon class="size-4" />
           {/if}
-        </Steps.NextTrigger>
+        </button>
       </footer>
     </div>
   </Steps>

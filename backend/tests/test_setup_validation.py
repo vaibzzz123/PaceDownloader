@@ -1,7 +1,10 @@
 from unittest.mock import MagicMock, patch
 
+import requests
+
 from models import SetupMediaValidationRequest
 from setup_validation import (
+    QBT_VALIDATION_TIMEOUT_SECONDS,
     build_setup_status,
     validate_media_location,
     validate_path_mapping,
@@ -125,11 +128,39 @@ def test_validate_qbittorrent_connection_rejects_blank_hostname():
     assert result.message == "qBittorrent hostname is required"
 
 
-@patch("setup_validation.qbittorrentapi.Client")
-def test_validate_qbittorrent_connection_logs_in_and_returns_version(mock_client_class):
-    mock_client = MagicMock()
-    mock_client.app_version.return_value = "v5.0.0"
-    mock_client_class.return_value = mock_client
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_defaults_url_without_scheme_to_http(mock_session_class):
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    login_response = MagicMock(status_code=200, text="Ok.")
+    version_response = MagicMock(text="v5.0.0")
+    mock_session.post.return_value = login_response
+    mock_session.get.return_value = version_response
+
+    result = validate_qbittorrent_connection("10.0.0.167:8080")
+
+    assert result.ok is True
+    mock_session.post.assert_called_once_with(
+        "http://10.0.0.167:8080/api/v2/auth/login",
+        data={"username": "", "password": ""},
+        timeout=QBT_VALIDATION_TIMEOUT_SECONDS,
+    )
+
+
+@patch("setup_validation.HTTPAdapter")
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_logs_in_and_returns_version(
+    mock_session_class,
+    mock_adapter_class,
+):
+    mock_adapter = MagicMock()
+    mock_adapter_class.return_value = mock_adapter
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    login_response = MagicMock(status_code=200, text="Ok.")
+    version_response = MagicMock(text="v5.0.0")
+    mock_session.post.return_value = login_response
+    mock_session.get.return_value = version_response
 
     result = validate_qbittorrent_connection(
         " http://qbittorrent:8080 ",
@@ -139,24 +170,77 @@ def test_validate_qbittorrent_connection_logs_in_and_returns_version(mock_client
 
     assert result.ok is True
     assert result.details["version"] == "v5.0.0"
-    mock_client_class.assert_called_once_with(
-        host="http://qbittorrent:8080",
-        username="admin",
-        password="password",
-        REQUESTS_ARGS={"timeout": 10},
+    mock_adapter_class.assert_called_once_with(max_retries=0)
+    mock_session.mount.assert_any_call("http://", mock_adapter)
+    mock_session.mount.assert_any_call("https://", mock_adapter)
+    mock_session.post.assert_called_once_with(
+        "http://qbittorrent:8080/api/v2/auth/login",
+        data={"username": "admin", "password": "password"},
+        timeout=QBT_VALIDATION_TIMEOUT_SECONDS,
     )
-    mock_client.auth_log_in.assert_called_once()
+    mock_session.get.assert_called_once_with(
+        "http://qbittorrent:8080/api/v2/app/version",
+        timeout=QBT_VALIDATION_TIMEOUT_SECONDS,
+    )
+    login_response.raise_for_status.assert_called_once()
+    version_response.raise_for_status.assert_called_once()
 
 
-@patch("setup_validation.qbittorrentapi.Client")
-def test_validate_qbittorrent_connection_returns_validation_error(mock_client_class):
-    mock_client_class.side_effect = RuntimeError("connection refused")
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_returns_validation_error(mock_session_class):
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    mock_session.post.side_effect = requests.ConnectionError("connection refused")
 
     result = validate_qbittorrent_connection("http://qbittorrent:8080")
 
     assert result.ok is False
-    assert result.message == "Could not connect to qBittorrent: connection refused"
-    assert result.details["error_type"] == "RuntimeError"
+    assert result.message == "Could not reach qBittorrent. Check the URL, port, and that the Web UI is enabled."
+    assert result.details["error_type"] == "ConnectionError"
+
+
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_returns_timeout_error(mock_session_class):
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    mock_session.post.side_effect = requests.Timeout("timed out")
+
+    result = validate_qbittorrent_connection("http://qbittorrent:8080")
+
+    assert result.ok is False
+    assert result.message == "Timed out connecting to qBittorrent. Check the URL, port, and Web UI status."
+    assert result.details["error_type"] == "Timeout"
+
+
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_rejects_failed_login(mock_session_class):
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    login_response = MagicMock(status_code=200, text="Fails.")
+    mock_session.post.return_value = login_response
+
+    result = validate_qbittorrent_connection("http://qbittorrent:8080")
+
+    assert result.ok is False
+    assert result.message == "Could not connect to qBittorrent: login failed"
+    assert result.details["status_code"] == 200
+    mock_session.get.assert_not_called()
+
+
+@patch("setup_validation.requests.Session")
+def test_validate_qbittorrent_connection_rejects_failed_login_status(mock_session_class):
+    mock_session = MagicMock()
+    mock_session_class.return_value = mock_session
+    login_response = MagicMock(status_code=401, text="")
+    mock_session.post.return_value = login_response
+
+    result = validate_qbittorrent_connection("http://qbittorrent:8080")
+
+    assert result.ok is False
+    assert result.message == "Could not connect to qBittorrent: login failed"
+    assert result.details["status_code"] == 401
+    login_response.raise_for_status.assert_not_called()
+    mock_session.get.assert_not_called()
 
 
 def test_validate_setup_media_route_matches_request_model(tmp_path):

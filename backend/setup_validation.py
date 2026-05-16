@@ -1,10 +1,14 @@
 import os
 from pathlib import Path
 from typing import Any
+from urllib.parse import urljoin, urlparse
 
-import qbittorrentapi
+import requests
+from requests.adapters import HTTPAdapter
 
 from models import SetupStatusResponse, SetupStepStatus, SetupValidationResponse
+
+QBT_VALIDATION_TIMEOUT_SECONDS = 2
 
 
 STEP_DEFINITIONS = [
@@ -132,20 +136,71 @@ def validate_qbittorrent_connection(
             ok=False,
             message="qBittorrent hostname is required",
         )
-
-    try:
-        client = qbittorrentapi.Client(
-            host=hostname,
-            username=qbt_username,
-            password=qbt_password,
-            REQUESTS_ARGS={"timeout": 10},
-        )
-        client.auth_log_in()
-        version = client.app_version()
-    except Exception as e:
+    if "://" not in hostname:
+        hostname = f"http://{hostname}"
+    parsed_hostname = urlparse(hostname)
+    if parsed_hostname.scheme not in {"http", "https"} or not parsed_hostname.netloc:
         return SetupValidationResponse(
             ok=False,
-            message=f"Could not connect to qBittorrent: {e}",
+            message="qBittorrent Web UI URL must be a host or an http(s) URL",
+            details={"error_type": "InvalidURL"},
+        )
+
+    try:
+        session = requests.Session()
+        adapter = HTTPAdapter(max_retries=0)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
+        login_response = session.post(
+            urljoin(f"{hostname.rstrip('/')}/", "api/v2/auth/login"),
+            data={"username": qbt_username, "password": qbt_password},
+            timeout=QBT_VALIDATION_TIMEOUT_SECONDS,
+        )
+        if login_response.status_code in {401, 403}:
+            return SetupValidationResponse(
+                ok=False,
+                message="Could not connect to qBittorrent: login failed",
+                details={"status_code": login_response.status_code},
+            )
+        login_response.raise_for_status()
+
+        if login_response.text.strip() != "Ok.":
+            return SetupValidationResponse(
+                ok=False,
+                message="Could not connect to qBittorrent: login failed",
+                details={"status_code": login_response.status_code},
+            )
+
+        version_response = session.get(
+            urljoin(f"{hostname.rstrip('/')}/", "api/v2/app/version"),
+            timeout=QBT_VALIDATION_TIMEOUT_SECONDS,
+        )
+        version_response.raise_for_status()
+        version = version_response.text.strip()
+    except requests.Timeout:
+        return SetupValidationResponse(
+            ok=False,
+            message="Timed out connecting to qBittorrent. Check the URL, port, and Web UI status.",
+            details={"error_type": "Timeout"},
+        )
+    except requests.ConnectionError:
+        return SetupValidationResponse(
+            ok=False,
+            message="Could not reach qBittorrent. Check the URL, port, and that the Web UI is enabled.",
+            details={"error_type": "ConnectionError"},
+        )
+    except requests.HTTPError as e:
+        status_code = e.response.status_code if e.response is not None else None
+        return SetupValidationResponse(
+            ok=False,
+            message="qBittorrent Web UI returned an error. Check the URL and Web UI status.",
+            details={"error_type": "HTTPError", "status_code": status_code},
+        )
+    except requests.RequestException as e:
+        return SetupValidationResponse(
+            ok=False,
+            message="Could not validate qBittorrent Web UI URL. Check the URL and try again.",
             details={"error_type": type(e).__name__},
         )
 
