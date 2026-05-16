@@ -532,7 +532,7 @@
             {#if restartNoticeVisible}
               <h2 class="text-xl font-semibold">Restart required</h2>
               <p class="text-sm">
-                Restart the Pace Downloader backend or app container to apply these settings.
+                Restart the Pace Downloader backend or Docker container to apply these settings.
               </p>
             {:else}
               <h2 class="text-xl font-semibold">Setup complete</h2>
