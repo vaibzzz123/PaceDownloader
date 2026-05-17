@@ -36,10 +36,33 @@ def get_db():
 def initialize_db():
     """Initialize the database and create necessary tables."""
     logger.info("Initializing database")
+    initialize_app_state_table()
     initialize_settings_table()
     initialize_torrent_download_table()
     initialize_episode_download_table()
     logger.info("Database initialized")
+
+
+def initialize_app_state_table():
+    logger.debug("Creating app_state table if not exists")
+    with get_db() as con:
+        con.execute("""
+            CREATE TABLE IF NOT EXISTS app_state (
+                singleton INTEGER PRIMARY KEY CHECK (singleton = 1) DEFAULT 1,
+                restart_required INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+
+        try:
+            con.execute("ALTER TABLE app_state ADD COLUMN restart_required INTEGER NOT NULL DEFAULT 0")
+            logger.debug("Added restart_required column to app_state table")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+
+        con.execute("""
+            INSERT OR IGNORE INTO app_state (singleton) VALUES (1)
+        """)
+        con.commit()
 
 
 def initialize_settings_table():
@@ -157,6 +180,31 @@ def initialize_episode_download_table():
             con.execute("ALTER TABLE episode_download_new RENAME TO episode_download")
             logger.info("Migration complete: torrent_infohash is now nullable")
 
+        con.commit()
+
+
+# --- app_state helpers ---
+
+
+def is_restart_required() -> bool:
+    with get_db() as con:
+        row = con.execute("SELECT restart_required FROM app_state WHERE singleton = 1").fetchone()
+        if not row:
+            return False
+        return bool(row["restart_required"])
+
+
+def set_restart_required(required: bool):
+    with get_db() as con:
+        con.execute(
+            """
+            INSERT INTO app_state (singleton, restart_required)
+            VALUES (1, ?)
+            ON CONFLICT(singleton) DO UPDATE SET
+                restart_required = excluded.restart_required
+            """,
+            (int(required),),
+        )
         con.commit()
 
 
