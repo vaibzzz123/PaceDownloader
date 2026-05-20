@@ -49,15 +49,20 @@ def initialize_app_state_table():
         con.execute("""
             CREATE TABLE IF NOT EXISTS app_state (
                 singleton INTEGER PRIMARY KEY CHECK (singleton = 1) DEFAULT 1,
-                restart_required INTEGER NOT NULL DEFAULT 0
+                restart_required INTEGER NOT NULL DEFAULT 0,
+                initial_setup_complete INTEGER NOT NULL DEFAULT 0
             )
         """)
 
-        try:
-            con.execute("ALTER TABLE app_state ADD COLUMN restart_required INTEGER NOT NULL DEFAULT 0")
-            logger.debug("Added restart_required column to app_state table")
-        except sqlite3.OperationalError:
-            pass  # column already exists
+        for col, definition in [
+            ("restart_required", "INTEGER NOT NULL DEFAULT 0"),
+            ("initial_setup_complete", "INTEGER NOT NULL DEFAULT 0"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE app_state ADD COLUMN {col} {definition}")
+                logger.debug("Added %s column to app_state table", col)
+            except sqlite3.OperationalError:
+                pass  # column already exists
 
         con.execute("""
             INSERT OR IGNORE INTO app_state (singleton) VALUES (1)
@@ -204,6 +209,28 @@ def set_restart_required(required: bool):
                 restart_required = excluded.restart_required
             """,
             (int(required),),
+        )
+        con.commit()
+
+
+def is_initial_setup_complete() -> bool:
+    with get_db() as con:
+        row = con.execute("SELECT initial_setup_complete FROM app_state WHERE singleton = 1").fetchone()
+        if not row:
+            return False
+        return bool(row["initial_setup_complete"])
+
+
+def set_initial_setup_complete(complete: bool):
+    with get_db() as con:
+        con.execute(
+            """
+            INSERT INTO app_state (singleton, initial_setup_complete)
+            VALUES (1, ?)
+            ON CONFLICT(singleton) DO UPDATE SET
+                initial_setup_complete = excluded.initial_setup_complete
+            """,
+            (int(complete),),
         )
         con.commit()
 

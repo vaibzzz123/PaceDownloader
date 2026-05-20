@@ -35,6 +35,11 @@ The restart-required endpoint still needs to be added:
 
 - `GET /restart-required`
 
+Singleton app-state storage now exists in `backend/db.py` for lifecycle flags:
+
+- `restart_required`
+- `initial_setup_complete`
+
 The backend setup validation logic lives in:
 
 - `backend/setup_validation.py`
@@ -75,18 +80,24 @@ The frontend currently keeps API calls close to the route using them:
 For setup, follow that pattern:
 
 - Add `frontend/src/routes/setup/+page.server.ts`.
-- Fetch `/settings` and `/restart-required` there.
-- Pass `data.settings` and `data.restartRequired` into `SetupWizard`.
-- Do not fetch `/setup/status` on the setup page unless the wizard grows a concrete UI need for backend-derived setup state.
+- Fetch `/settings`, `/setup/status`, and `/restart-required` there.
+- Pass `data.settings`, `data.setupStatus`, and `data.restartRequired` into `SetupWizard`.
+- Use `setupStatus.required` plus `restartRequired` to distinguish Initial Setup waiting for restart from later settings-page restart-required changes.
 - Keep setup validation and save helpers local to `frontend/src/routes/setup/+page.svelte`, and pass typed callbacks into `SetupWizard.svelte`.
 
 ## API Contract
 
 ### `GET /setup/status`
 
-Returns whether setup configuration fields are populated and which steps are incomplete.
+Returns whether Initial Setup still blocks normal app routes, whether the required setup configuration has been saved, and which setup steps are incomplete.
 
-Important: `complete` means the required configuration is saved. For v1, **Initial Setup** is not fully complete until the backend/container has restarted and applied that saved configuration.
+Important: `complete` means Initial Setup is fully applied and no longer blocks normal app routes. Required configuration being saved is necessary, but not sufficient. For v1, the wizard save should set `restart_required = true` and leave `initial_setup_complete = false`; a backend/container restart marks Initial Setup complete.
+
+Use separate concepts:
+
+- `configuration_complete`: derived from saved settings and step validation. This becomes `true` as soon as the wizard has successfully saved required settings.
+- `complete`: derived from `configuration_complete` and `app_state.initial_setup_complete`. This becomes `true` only after the backend has restarted and applied saved setup.
+- `required`: `true` when Initial Setup still blocks normal app routes. This remains true after the wizard save until restart finishes.
 
 Expected shape:
 
@@ -94,6 +105,7 @@ Expected shape:
 {
   "required": true,
   "complete": false,
+  "configuration_complete": false,
   "missing_fields": ["media_data_location", "qbt_hostname"],
   "steps": [
     {
@@ -128,10 +140,13 @@ true
 
 Storage and lifecycle:
 
-- Store `restart_required` in the database as singleton runtime/app state, not as a Python process variable and not as a setting exposed through `/settings`.
-- Clear `restart_required` during backend startup after DB initialization. A fresh process has now had the chance to apply saved settings.
-- Set `restart_required = true` from `PUT /settings` when initial setup changes from incomplete to complete.
-- Set `restart_required = true` from `PUT /settings` when any restart-applied effective setting changes.
+- Store `restart_required` and `initial_setup_complete` in the database as singleton runtime/app state, not as Python process variables and not as settings exposed through `/settings`.
+- During backend startup after DB initialization, derive whether the saved configuration is complete.
+- If saved configuration is complete, set `initial_setup_complete = true` and clear `restart_required`. A fresh process has now had the chance to apply saved settings.
+- If saved configuration is incomplete, set `initial_setup_complete = false`.
+- Set `restart_required = true` from `PUT /settings` when Initial Setup changes from unconfigured to configured, but keep `initial_setup_complete = false` until restart.
+- Set `restart_required = true` from `PUT /settings` when any restart-applied effective setting changes after Initial Setup is already complete.
+- Do not clear `initial_setup_complete` for later settings-page changes that require restart; the app is still usable with the old applied settings.
 - Do not set `restart_required` when only `prefer_extended` changes.
 - If qBittorrent is unreachable after restart, treat that as a connectivity/configuration problem, not as a still-pending restart.
 
@@ -300,16 +315,18 @@ Steps:
 
 1. Add `frontend/src/routes/setup/+page.server.ts`.
 2. Fetch `GET /settings`.
-3. Once `GET /restart-required` exists, also fetch it in the same server load.
-4. Type the settings response using `$lib/types/api`.
-5. Return `{ settings, restartRequired }`.
-6. Pass `data.settings` and `data.restartRequired` from `+page.svelte` into `SetupWizard`.
+3. Fetch `GET /setup/status`.
+4. Once `GET /restart-required` exists, also fetch it in the same server load.
+5. Type the settings and setup-status responses using `$lib/types/api`.
+6. Return `{ settings, setupStatus, restartRequired }`.
+7. Pass `data.settings`, `data.setupStatus`, and `data.restartRequired` from `+page.svelte` into `SetupWizard`.
 
-Do not fetch `GET /setup/status` in this milestone. The setup page only needs current saved settings as initial form values. Setup status is more relevant to redirect guards and app-wide setup state.
+The setup page needs `GET /setup/status` because `restartRequired === true` has two meanings. If `setupStatus.required === true`, the user must stay in setup and see the restart-required completion state. If `setupStatus.required === false`, restart is only a settings-page/app-wide notice and must not force setup.
 
 Acceptance criteria:
 
 - Setup page has current settings available as initial form values.
+- Setup page can distinguish Initial Setup waiting for restart from later restart-required settings changes.
 - Setup page has the backend restart-required flag available once that endpoint exists.
 - Failed server-load requests produce useful SvelteKit errors.
 
@@ -435,53 +452,70 @@ Files to consider:
 
 Backend restart-required behavior:
 
-1. Add singleton runtime/app-state storage for `restart_required`.
-2. Add DB helpers to read, set, and clear the flag.
+1. Add singleton runtime/app-state storage for `restart_required` and `initial_setup_complete`.
+2. Add DB/app-settings helpers to read and set both flags.
 3. Add `GET /restart-required`, returning a plain JSON boolean.
-4. Clear the flag during backend startup after DB initialization.
-5. In `PUT /settings`, compare effective settings before and after save.
-6. Set the flag when setup changes from incomplete to complete.
-7. Set the flag when any restart-applied effective setting changes.
-8. Do not set the flag when only `prefer_extended` changes.
-9. Preserve masked password behavior so submitting `********` does not create a false positive change.
+4. During backend startup after DB initialization, compute whether required setup configuration is saved.
+5. If required setup configuration is saved, set `initial_setup_complete = true` and clear `restart_required`.
+6. If required setup configuration is incomplete, set `initial_setup_complete = false`.
+7. In `PUT /settings`, compare effective settings before and after save.
+8. When required setup configuration changes from incomplete to complete, set `restart_required = true` and keep `initial_setup_complete = false`.
+9. When Initial Setup is already complete, set `restart_required = true` for changes to restart-applied effective settings.
+10. Do not set the flag when only `prefer_extended` changes.
+11. Preserve masked password behavior so submitting `********` does not create a false positive change.
+
+Setup status behavior:
+
+- Derive `configuration_complete` from saved settings and step validation.
+- Derive `complete` from `configuration_complete && initial_setup_complete`.
+- Derive `required` from `!complete`.
+- Initial wizard save should produce `configuration_complete === true`, `complete === false`, and `restart_required === true`.
+- Later settings-page restart-required changes should preserve `complete === true`.
 
 Frontend route behavior:
 
 - `/setup` is always accessible.
 - Settings remains accessible while restart is required.
-- Route guard checks `GET /setup/status` to decide incomplete setup redirects.
-- Route guard also checks `GET /restart-required` to decide saved-but-not-restarted behavior.
+- Route guard checks `GET /setup/status` to decide Initial Setup redirects.
 - If `setupStatus.required === true`, redirect non-setup routes to `/setup`.
-- If `restartRequired === true`, redirect app routes other than settings to `/setup`, where the wizard shows the restart-required final page.
-- If setup config is complete and `restartRequired === false`, app routes proceed.
+- If `setupStatus.required === false`, app routes proceed even when `restartRequired === true`.
+- `restartRequired === true` with `setupStatus.required === true` means saved initial setup is waiting for restart; `/setup` shows the restart-required final page.
+- `restartRequired === true` with `setupStatus.required === false` means a settings-page change requires restart; allow normal app use and show restart messaging in settings/app chrome.
 - Backend unreachable should show a useful error state, not an infinite redirect.
 - Avoid redirect loops for `/setup` and `/settings`.
 
 Setup page behavior:
 
-- Server load fetches `GET /settings` and `GET /restart-required`.
-- `SetupWizard` receives `restartRequired`.
-- If `restartRequired === true`, open directly to the final restart-required page.
+- Server load fetches `GET /settings`, `GET /setup/status`, and `GET /restart-required`.
+- `SetupWizard` receives `setupStatus` and `restartRequired`.
+- If `restartRequired === true` and `setupStatus.required === true`, open directly to the final restart-required page.
+- If `restartRequired === true` and `setupStatus.required === false`, do not force the final setup page; that state belongs to the settings/app restart notice.
 - Disable further final saves while showing the restart-required page.
 - After save success, keep showing the local restart-required state immediately; future reloads should get it from `GET /restart-required`.
 
 Acceptance criteria:
 
 - `GET /restart-required` returns `false` by default.
+- Fresh app-state defaults to `initial_setup_complete = false`.
 - Completing initial setup sets `restart_required = true`.
+- Completing initial setup does not set `initial_setup_complete = true` until backend restart.
+- Backend startup with complete saved configuration sets `initial_setup_complete = true` and clears `restart_required`.
+- Backend startup with incomplete saved configuration leaves or sets `initial_setup_complete = false`.
 - Changing a restart-applied setting sets `restart_required = true`.
 - Changing only `prefer_extended` does not set `restart_required = true`.
-- Backend startup clears `restart_required`.
+- Settings-page changes that require restart do not set `initial_setup_complete = false`.
 - Visiting an app route with incomplete setup redirects to `/setup`.
 - Visiting `/setup` does not redirect-loop.
 - Visiting settings while restart is required does not redirect-loop.
 - Saved setup plus backend restart allows normal app navigation.
 - Saved setup without backend restart shows the setup restart-required state.
+- Restart-required settings changes after Initial Setup do not force app routes back to `/setup`.
 
 Validation:
 
 - Add or update backend tests for the restart-required endpoint and settings-save flag behavior.
-- Add or update backend tests for startup clear helper behavior.
+- Add or update backend tests for `initial_setup_complete` startup behavior.
+- Add or update backend tests for setup status `configuration_complete`, `complete`, and `required` combinations.
 - Start the backend and regenerate frontend OpenAPI types:
   ```bash
   cd frontend
@@ -592,25 +626,30 @@ Use a fresh DB or reset settings, then verify:
 8. One-sided path mapping fails.
 9. Settings save succeeds.
 10. Setup save sets `restart_required = true`.
-11. `GET /restart-required` returns `true` before restart.
-12. Restart-required completion screen appears.
-13. Settings page shows the restart-required message while the flag is true.
-14. Backend/container restart clears `restart_required` and applies settings.
-15. `GET /restart-required` returns `false` after restart.
-16. Frontend OpenAPI types include `GET /restart-required`.
-17. Changing a restart-applied setting from Settings sets `restart_required = true`.
-18. Changing only `prefer_extended` does not set `restart_required = true`.
-19. App routes load after restart.
-20. Download-manager routes behave normally after restart.
-21. No auth fields appear.
-22. No secrets are displayed in logs or UI.
-23. Dark/light UI both remain acceptable.
+11. Setup save leaves `initial_setup_complete = false`.
+12. `GET /setup/status` reports `configuration_complete = true`, `complete = false`, and `required = true` before restart.
+13. `GET /restart-required` returns `true` before restart.
+14. Restart-required completion screen appears.
+15. Backend/container restart sets `initial_setup_complete = true`, clears `restart_required`, and applies settings.
+16. `GET /setup/status` reports `complete = true` and `required = false` after restart.
+17. `GET /restart-required` returns `false` after restart.
+18. Settings page shows the restart-required message while the flag is true.
+19. Frontend OpenAPI types include `GET /restart-required` and any setup-status shape changes.
+20. Changing a restart-applied setting from Settings sets `restart_required = true`.
+21. Changing a restart-applied setting from Settings does not set `initial_setup_complete = false`.
+22. Changing only `prefer_extended` does not set `restart_required = true`.
+23. App routes keep loading during later settings-page restart-required state.
+24. App routes load after initial setup restart.
+25. Download-manager routes behave normally after restart.
+26. No auth fields appear.
+27. No secrets are displayed in logs or UI.
+28. Dark/light UI both remain acceptable.
 
 ## Working Notes
 
 - Keep changes small and coherent.
 - Prefer existing route-local fetch patterns over new shared client abstractions.
 - Keep backend and frontend terminology aligned.
-- Regenerate OpenAPI types only after backend contract changes; for this plan, regenerate after adding `GET /restart-required`.
+- Regenerate OpenAPI types only after backend contract changes; for this plan, regenerate after adding `GET /restart-required` and after changing the setup-status response shape.
 - Do not hand-edit generated API types.
 - Do not mix runtime placement-error handling into the wizard milestones unless needed for a specific bug.

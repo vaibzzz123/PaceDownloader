@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
+from setup_validation import build_setup_status
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +16,11 @@ from logging_config import get_logger, setup_logging
 
 # Initialize database and logging before other imports that may log
 db.initialize_db()
+db.set_restart_required(False)
+
+settings = app_settings.get_settings()
+setup_status = build_setup_status(settings)
+db.set_initial_setup_complete(setup_status.complete)
 log_level = app_settings.get_setting_value("log_level") or "INFO"
 setup_logging(log_level)
 
