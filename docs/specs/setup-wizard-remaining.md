@@ -1,156 +1,93 @@
-# Setup Wizard Remaining Roadmap
+# Initial Setup And Restart State
 
 ## Purpose
 
-Finish **Initial Setup** for Pace Downloader in a way that is practical for a human maintainer to implement and verify incrementally.
+Finish **Initial Setup** with one small lifecycle model that is easy to reason about:
 
-This file used to be organized for agents working in parallel slices. The current goal is different: keep the work readable, dependency-ordered, and easy to drive manually.
+- **Initial Setup Complete** says whether the backend has restarted with enough effective configuration for normal app routes.
+- **Restart Required** says whether saved settings differ from the settings currently applied by the running backend process.
+
+The setup wizard validates and saves settings. It does not directly set lifecycle flags. The backend owns those flags.
 
 ## Product Goal
 
-A fresh install should have a clear first-run path:
+A fresh install should behave like this:
 
-1. Backend starts even when setup is incomplete.
-2. Visiting the app sends the user to `/setup`.
+1. The backend starts even when required settings are missing.
+2. App routes redirect to `/setup` while **Initial Setup Complete** is false.
 3. The setup wizard validates media, qBittorrent, and optional path mapping.
-4. The wizard saves settings.
-5. The user sees a restart-required completion state.
-6. After restarting the backend/container, normal app routes load.
-
-## Current State
-
-The setup wizard shell exists:
-
-- `frontend/src/routes/setup/+page.svelte`
-- `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
-
-The backend exposes setup status and validation endpoints:
-
-- `GET /setup/status`
-- `POST /setup/validate/media`
-- `POST /setup/validate/qbittorrent`
-- `POST /setup/validate/path-mapping`
-
-The restart-required endpoint still needs to be added:
-
-- `GET /restart-required`
-
-Singleton app-state storage now exists in `backend/db.py` for lifecycle flags:
-
-- `restart_required`
-- `initial_setup_complete`
-
-The backend setup validation logic lives in:
-
-- `backend/setup_validation.py`
-- `backend/models.py`
-- `backend/api.py`
-- `backend/tests/test_setup_validation.py`
-
-Backend validation currently covers:
-
-- required setup fields
-- media path existence/directory/writability
-- qBittorrent login/connectivity
-- optional path mapping consistency
-- local qBittorrent path existence when mapping is configured
-
-Generated frontend API types already appear to include the setup endpoints. Regenerate `frontend/src/lib/types/api.d.ts` after adding `GET /restart-required`, or after any other backend route/model contract change.
+4. The wizard saves settings through `PUT /settings`.
+5. If the saved effective configuration is complete, the user sees a restart-required setup completion screen.
+6. After backend/container restart, normal app routes load.
+7. Later changes to Restart-Applied Settings show a restart warning but do not block normal app use.
 
 ## Non-Goals
 
-- Do not add username/password app auth.
-- Do not redesign the whole settings page.
+- Do not add app username/password authentication.
 - Do not add in-process qBittorrent/download-manager reinitialization for v1.
-- Do not add remote path probing through qBittorrent unless explicitly asked later.
+- Do not probe qBittorrent remote paths from the backend.
 - Do not hand-edit `frontend/src/lib/types/api.d.ts`; regenerate it from OpenAPI.
+- Do not expose lifecycle flags as user-editable settings.
 
-## Frontend API Pattern
+## Lifecycle State
 
-Do not add `frontend/src/lib/api/setup.ts` for now.
+The backend stores lifecycle state in the singleton `app_state` row:
 
-The frontend currently keeps API calls close to the route using them:
+- `initial_setup_complete`
+- `restart_required`
 
-- Initial page data is fetched in route-local `+page.server.ts` files.
-- Client-side actions use small local helpers inside the relevant route `+page.svelte`.
-- Reusable components receive typed callback props for validation/save work instead of importing backend URLs or calling API endpoints directly.
-- API response shapes are typed with `components['schemas'][...]` from `$lib/types/api`.
-- Requests use `PUBLIC_BACKEND_URL`.
+The four meaningful states are:
 
-For setup, follow that pattern:
+| `initial_setup_complete` | `restart_required` | Meaning | Frontend behavior |
+|---|---:|---|---|
+| `false` | `false` | Initial Setup still needs required values | Redirect app routes to `/setup`; show wizard |
+| `false` | `true` | Initial Setup was saved, but the backend has not restarted with it | Redirect app routes to `/setup`; show restart-required completion |
+| `true` | `false` | Current backend process has applied saved setup | Normal app |
+| `true` | `true` | A later Restart-Applied Setting changed | Normal app; show Settings restart warning |
 
-- Add `frontend/src/routes/setup/+page.server.ts`.
-- Fetch `/settings`, `/setup/status`, and `/restart-required` there.
-- Pass `data.settings`, `data.setupStatus`, and `data.restartRequired` into `SetupWizard`.
-- Use `setupStatus.required` plus `restartRequired` to distinguish Initial Setup waiting for restart from later settings-page restart-required changes.
-- Keep setup validation and save helpers local to `frontend/src/routes/setup/+page.svelte`, and pass typed callbacks into `SetupWizard.svelte`.
+No frontend input should set either flag directly.
 
-## API Contract
+## Effective Settings
 
-### `GET /setup/status`
+Use effective settings whenever deciding whether setup is complete or whether runtime behavior can start. Effective settings are the values returned by `db.get_settings()`:
 
-Returns whether Initial Setup still blocks normal app routes, whether the required setup configuration has been saved, and which setup steps are incomplete.
+- environment value when an env var is present
+- SQLite value otherwise
+- `env_override: true` when the value came from env
 
-Important: `complete` means Initial Setup is fully applied and no longer blocks normal app routes. Required configuration being saved is necessary, but not sufficient. For v1, the wizard save should set `restart_required = true` and leave `initial_setup_complete = false`; a backend/container restart marks Initial Setup complete.
+Environment variables count as valid configuration. For example, if `MEDIA_DATA_LOCATION` and `QBT_HOSTNAME` are set, Initial Setup can be complete even when those fields are empty in SQLite.
 
-Use separate concepts:
+Required Initial Setup configuration:
 
-- `configuration_complete`: derived from saved settings and step validation. This becomes `true` as soon as the wizard has successfully saved required settings.
-- `complete`: derived from `configuration_complete` and `app_state.initial_setup_complete`. This becomes `true` only after the backend has restarted and applied saved setup.
-- `required`: `true` when Initial Setup still blocks normal app routes. This remains true after the wizard save until restart finishes.
+- `media_data_location` has a non-empty effective value.
+- `qbt_hostname` has a non-empty effective value.
+- `qbt_path_local` and `qbt_path_remote` are either both empty or both non-empty.
 
-Expected shape:
+Connectivity validation is not part of lifecycle completeness. If qBittorrent is unreachable after restart, that is an operational/configuration problem, not pending Initial Setup.
 
-```json
-{
-  "required": true,
-  "complete": false,
-  "configuration_complete": false,
-  "missing_fields": ["media_data_location", "qbt_hostname"],
-  "steps": [
-    {
-      "id": "media",
-      "complete": false,
-      "required": true,
-      "missing_fields": ["media_data_location"],
-      "errors": []
-    }
-  ]
-}
-```
+## Settings Save Rules
 
-Known step IDs:
+`PUT /settings` must preserve the difference between stored settings and effective settings.
 
-- `media`
-- `qbt`
-- `paths`
-- `preferences`
+On save:
 
-Frontend owns display labels and step order.
+1. Read effective settings before save.
+2. Read stored SQLite settings before save where needed.
+3. Preserve the stored password when the submitted password is the masked placeholder.
+4. Preserve stored SQLite values for env-overridden fields instead of writing env values back into SQLite.
+5. Save the resulting stored settings.
+6. Read effective settings after save.
+7. Update lifecycle flags from backend-owned rules.
 
-### `GET /restart-required`
+Flag rules:
 
-Returns whether the current backend process needs a restart before saved settings are applied.
+- If Initial Setup is incomplete before save and effective configuration is complete after save, set `restart_required = true` and keep `initial_setup_complete = false`.
+- If Initial Setup is incomplete after save, keep `initial_setup_complete = false` and `restart_required = false`.
+- If Initial Setup is complete and a Restart-Applied Setting changed effectively, set `restart_required = true`.
+- Do not clear `initial_setup_complete` for later settings-page changes.
+- Do not set `restart_required` when only `prefer_extended` changed.
 
-Expected response is a plain JSON boolean:
-
-```json
-true
-```
-
-Storage and lifecycle:
-
-- Store `restart_required` and `initial_setup_complete` in the database as singleton runtime/app state, not as Python process variables and not as settings exposed through `/settings`.
-- During backend startup after DB initialization, derive whether the saved configuration is complete.
-- If saved configuration is complete, set `initial_setup_complete = true` and clear `restart_required`. A fresh process has now had the chance to apply saved settings.
-- If saved configuration is incomplete, set `initial_setup_complete = false`.
-- Set `restart_required = true` from `PUT /settings` when Initial Setup changes from unconfigured to configured, but keep `initial_setup_complete = false` until restart.
-- Set `restart_required = true` from `PUT /settings` when any restart-applied effective setting changes after Initial Setup is already complete.
-- Do not clear `initial_setup_complete` for later settings-page changes that require restart; the app is still usable with the old applied settings.
-- Do not set `restart_required` when only `prefer_extended` changes.
-- If qBittorrent is unreachable after restart, treat that as a connectivity/configuration problem, not as a still-pending restart.
-
-Restart-applied settings:
+Restart-Applied Settings:
 
 - `media_data_location`
 - `qbt_hostname`
@@ -163,7 +100,52 @@ Restart-applied settings:
 - `qbt_polling_rate`
 - `log_level`
 
+`prefer_extended` is not Restart-Applied because download requests read it when they start.
+
+## Startup Rules
+
+During backend startup, after DB initialization and dotenv loading:
+
+1. Read effective settings.
+2. If required Initial Setup configuration is complete:
+   - set `initial_setup_complete = true`
+   - set `restart_required = false`
+   - initialize metadata sync, qBittorrent client, download manager, polling, and startup scan
+3. If required Initial Setup configuration is incomplete:
+   - set `initial_setup_complete = false`
+   - set `restart_required = false`
+   - skip qBittorrent client, download manager, polling, and startup scan
+
+The same shared helper should decide Initial Setup configuration completeness for startup, settings-save flag logic, and tests.
+
+## API Contract
+
+### `GET /app-state`
+
+Returns the two lifecycle flags.
+
+```json
+{
+  "initial_setup_complete": false,
+  "restart_required": true
+}
+```
+
+This endpoint is the frontend source of truth for route guards and restart messaging.
+
+### `GET /settings`
+
+Returns effective settings, including `env_override`, with the qBittorrent password masked for UI display.
+
+### `PUT /settings`
+
+Saves stored settings and updates lifecycle flags using the rules above.
+
+The frontend should keep using this endpoint for both the setup wizard and the Settings page.
+
 ### `POST /setup/validate/media`
+
+Validates `media_data_location`.
 
 Request:
 
@@ -172,8 +154,6 @@ Request:
   "media_data_location": "/media/One Pace"
 }
 ```
-
-`media_data_location` means the **Media Data Location**: the path visible to Pace Downloader where organized episode files will be placed. It is not necessarily the path Jellyfin uses inside its own container.
 
 Response:
 
@@ -191,6 +171,8 @@ Response:
 ```
 
 ### `POST /setup/validate/qbittorrent`
+
+Validates qBittorrent Web UI login/connectivity.
 
 Request:
 
@@ -216,6 +198,8 @@ Response:
 
 ### `POST /setup/validate/path-mapping`
 
+Validates optional qBittorrent path mapping. Empty mapping is valid. One-sided mapping is invalid.
+
 Request:
 
 ```json
@@ -224,17 +208,6 @@ Request:
   "qbt_path_remote": "/downloads"
 }
 ```
-
-Path mapping is optional. It is required only when qBittorrent reports torrent file paths from a different filesystem perspective than Pace Downloader can access.
-
-Example:
-
-- qBittorrent reports `/downloads/torrent_folder_1/torrent_file_1.mkv`
-- Pace Downloader can access the same file at `/data/torrents/downloads/torrent_folder_1/torrent_file_1.mkv`
-- `qbt_path_remote=/downloads`
-- `qbt_path_local=/data/torrents/downloads`
-
-If there is no mismatch, both fields should be left empty and Pace Downloader will treat qBittorrent-reported paths as directly usable.
 
 Response:
 
@@ -252,404 +225,155 @@ Response:
 }
 ```
 
-Remote path is trusted. Runtime placement/linking errors should be surfaced separately.
+Remote path is trusted. Runtime placement/linking errors should be surfaced by download status handling.
 
-## Implementation Order
+## Frontend Behavior
 
-### Milestone 1: Backend Boots Without Setup
+Keep API calls route-local. Do not add a shared setup API client yet.
 
-This is the first dependency. The wizard cannot deliver a good first-run experience if the backend fails before the user can configure it.
+### Route Guard
 
-Files to inspect/change:
+`frontend/src/hooks.server.ts` should fetch `GET /app-state`.
 
-- `backend/main.py`
-- `backend/qbittorrent.py`
-- `backend/dependencies.py`
-- `backend/download_manager.py`
-- `backend/api.py`
-- backend tests
+- If `initial_setup_complete === false`, redirect non-setup routes to `/setup`.
+- If `initial_setup_complete === true`, allow app routes even when `restart_required === true`.
+- Backend unreachable should produce a useful SvelteKit error instead of a redirect loop.
 
-Desired behavior:
+### Setup Page
 
-- Backend starts with empty `media_data_location`.
-- Backend starts with empty `qbt_hostname`.
-- Backend starts when qBittorrent is unreachable.
-- `/settings`, `/setup/status`, and `/setup/validate/*` still work.
-- Routes that require the download manager return a clear setup/configuration error.
-- No download polling loop starts without a configured qBittorrent client.
-- For v1, saved setup requires a manual backend/container restart.
+`frontend/src/routes/setup/+page.server.ts` should fetch:
 
-Suggested approach:
+- `GET /settings`
+- `GET /app-state`
 
-1. Initialize DB and logging as today.
-2. Build setup status at boot.
-3. If setup is incomplete, skip qBittorrent client construction.
-4. If setup is incomplete, skip download-manager construction, polling, and startup scan.
-5. Keep setup/settings routes available.
-6. Do not add live lifecycle reinitialization yet.
+The setup page should:
 
-Acceptance criteria:
+- show the wizard when `initial_setup_complete === false && restart_required === false`
+- show the restart-required completion state when `initial_setup_complete === false && restart_required === true`
+- avoid offering another final save while waiting for restart
+- optionally redirect away from `/setup` when `initial_setup_complete === true`
 
-- Backend can start with a fresh or empty settings DB.
-- Setup endpoints work before qBittorrent is configured.
-- Download routes return a useful error shape instead of crashing.
-- Existing configured startup behavior still works.
+### Settings Page
 
-Validation:
+`frontend/src/routes/(app)/settings/+page.server.ts` should fetch:
 
-- Add or update backend tests for incomplete setup startup.
-- Add or update API tests for setup endpoint availability.
-- Add or update API tests for qBittorrent/download-manager-required route errors.
+- `GET /settings`
+- `GET /app-state`
 
-### Milestone 2: Setup Route Server Load
+The Settings page should:
 
-Follow the current SvelteKit pattern instead of introducing a shared setup API client.
+- show a persistent Restart Required warning when `initial_setup_complete === true && restart_required === true`
+- refetch `GET /app-state` after save
+- show normal "Settings saved" feedback when no restart is required
+- keep env-overridden fields disabled as today
 
-Files:
+### Setup Wizard
 
-- `frontend/src/routes/setup/+page.server.ts`
-- `frontend/src/routes/setup/+page.svelte`
-- `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
-
-Steps:
-
-1. Add `frontend/src/routes/setup/+page.server.ts`.
-2. Fetch `GET /settings`.
-3. Fetch `GET /setup/status`.
-4. Once `GET /restart-required` exists, also fetch it in the same server load.
-5. Type the settings and setup-status responses using `$lib/types/api`.
-6. Return `{ settings, setupStatus, restartRequired }`.
-7. Pass `data.settings`, `data.setupStatus`, and `data.restartRequired` from `+page.svelte` into `SetupWizard`.
-
-The setup page needs `GET /setup/status` because `restartRequired === true` has two meanings. If `setupStatus.required === true`, the user must stay in setup and see the restart-required completion state. If `setupStatus.required === false`, restart is only a settings-page/app-wide notice and must not force setup.
-
-Acceptance criteria:
-
-- Setup page has current settings available as initial form values.
-- Setup page can distinguish Initial Setup waiting for restart from later restart-required settings changes.
-- Setup page has the backend restart-required flag available once that endpoint exists.
-- Failed server-load requests produce useful SvelteKit errors.
-
-Validation:
-
-- Run frontend build after wiring.
-
-### Milestone 3: Wizard Form State And Validation
-
-Replace the placeholder wizard content with real fields and per-step validation.
-
-Files:
-
-- `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
-- `frontend/src/routes/setup/+page.svelte`
-
-Form state:
-
-- `media_data_location`
-- `qbt_hostname`
-- `qbt_username`
-- `qbt_password`
-- `qbt_path_local`
-- `qbt_path_remote`
-- `prefer_extended`
-- `qbt_category`
-- `qbt_download_location`
-- `qbt_polling_rate`
-- `log_level`
-
-Validation behavior:
+The wizard should keep using per-step validation:
 
 - Media step calls `POST /setup/validate/media`.
 - qBittorrent step calls `POST /setup/validate/qbittorrent`.
 - Paths step calls `POST /setup/validate/path-mapping`.
-- Empty path mapping is accepted.
-- One-sided path mapping is rejected.
-- Validation responses with `ok: false` should display their message and should not advance.
-- HTTP/network failures should show a useful error.
+- Final review calls `PUT /settings`.
 
-UI notes:
+Validation responses with `ok: false` should display their message and should not advance. Passwords should never be displayed in review or logs.
 
-- Use the existing Skeleton/Svelte patterns from the settings page.
-- Keep labels friendly rather than exposing raw setting keys.
-- qBittorrent password uses `type="password"` and `autocomplete="new-password"`.
-- Preferences are visible but not required unless backend settings validation rejects final save.
-- Review step masks the password.
-- Light and dark modes should remain usable.
+## Implementation Plan
 
-Suggested labels:
-
-- `media_data_location`: "Media data location" - "Path visible to Pace Downloader where organized One Pace files will be placed."
-- `qbt_hostname`: "qBittorrent Web UI URL" - "URL Pace Downloader uses to reach qBittorrent."
-- `qbt_username`: "qBittorrent username"
-- `qbt_password`: "qBittorrent password"
-- `qbt_path_remote`: "Remote path reported by qBittorrent" - "Path prefix qBittorrent reports for downloaded files, such as `/downloads`."
-- `qbt_path_local`: "Path visible to Pace Downloader" - "Matching path prefix Pace Downloader can read, such as `/data/torrents/downloads`."
-- `qbt_category`: "qBittorrent category"
-- `qbt_download_location`: "qBittorrent download location"
-- `qbt_polling_rate`: "Polling rate"
-- `log_level`: "Log level"
-
-Acceptance criteria:
-
-- Wizard contains no dummy placeholder field text.
-- User cannot advance past media/qBittorrent/path steps when validation fails.
-- Validation messages appear near relevant fields.
-- Password is never displayed in review.
-- Advanced/default settings are visible but clearly optional.
-
-Validation:
-
-- Run frontend build.
-- Manually check `/setup` in browser.
-
-### Milestone 4: Save Settings And Restart Required UX
-
-Persist setup through the existing settings endpoint.
+### 1. Backend State Contract
 
 Files:
 
-- `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
-- backend settings models/routes only if the save contract must change
-
-Steps:
-
-1. On final review, submit the full payload to `PUT /settings`.
-2. Ensure `qbt_polling_rate` is at least `5`.
-3. Preserve current defaults for optional fields.
-4. Show backend `422` errors inline.
-5. After successful save, show a restart-required state.
-6. Tell Docker Compose users to restart the backend/app container.
-7. Do not automatically navigate into the app before restart.
-
-Acceptance criteria:
-
-- Settings are saved to backend.
-- Password is sent only on validation/save and never rendered back.
-- Restart-required state clearly says v1 applies setup after backend/container restart.
-- Initial Setup is presented as incomplete until restart finishes.
-
-Validation:
-
-- Run frontend build.
-- Manual smoke test with backend.
-
-### Milestone 5: App Route Guard
-
-Guard app routes after the backend can boot incomplete, the setup page can save settings, and the backend exposes restart-required state.
-
-Files to consider:
-
+- `backend/models.py`
+- `backend/api.py`
 - `backend/db.py`
 - `backend/app_settings.py`
-- `backend/api.py`
+- `backend/setup_validation.py`
 - `backend/main.py`
-- `backend/tests/test_settings_api.py`
+
+Work:
+
+- Add `AppStateResponse`.
+- Add `GET /app-state`.
+- Keep `app_state` storage in SQLite.
+- Add one shared helper for Initial Setup configuration completeness.
+- Use that helper in startup and settings-save logic.
+- Remove or stop relying on detailed setup-status lifecycle fields.
+
+### 2. Effective Settings Save
+
+Files:
+
+- `backend/api.py`
+- `backend/app_settings.py`
+- `backend/db.py`
+- backend tests
+
+Work:
+
+- Preserve masked password behavior.
+- Preserve stored DB values for env-overridden fields.
+- Compare effective Restart-Applied Settings before and after save.
+- Set lifecycle flags according to the rules in this document.
+- Treat invalid `QBT_POLLING_RATE` env values as absent/fallback, not as an effective string value.
+
+### 3. Frontend Wiring
+
+Files:
+
 - `frontend/src/hooks.server.ts`
-- `frontend/src/routes/(app)/+layout.svelte`
 - `frontend/src/routes/setup/+page.server.ts`
 - `frontend/src/routes/setup/+page.svelte`
 - `frontend/src/lib/components/SetupWizard/SetupWizard.svelte`
-
-Backend restart-required behavior:
-
-1. Add singleton runtime/app-state storage for `restart_required` and `initial_setup_complete`.
-2. Add DB/app-settings helpers to read and set both flags.
-3. Add `GET /restart-required`, returning a plain JSON boolean.
-4. During backend startup after DB initialization, compute whether required setup configuration is saved.
-5. If required setup configuration is saved, set `initial_setup_complete = true` and clear `restart_required`.
-6. If required setup configuration is incomplete, set `initial_setup_complete = false`.
-7. In `PUT /settings`, compare effective settings before and after save.
-8. When required setup configuration changes from incomplete to complete, set `restart_required = true` and keep `initial_setup_complete = false`.
-9. When Initial Setup is already complete, set `restart_required = true` for changes to restart-applied effective settings.
-10. Do not set the flag when only `prefer_extended` changes.
-11. Preserve masked password behavior so submitting `********` does not create a false positive change.
-
-Setup status behavior:
-
-- Derive `configuration_complete` from saved settings and step validation.
-- Derive `complete` from `configuration_complete && initial_setup_complete`.
-- Derive `required` from `!complete`.
-- Initial wizard save should produce `configuration_complete === true`, `complete === false`, and `restart_required === true`.
-- Later settings-page restart-required changes should preserve `complete === true`.
-
-Frontend route behavior:
-
-- `/setup` is always accessible.
-- Settings remains accessible while restart is required.
-- Route guard checks `GET /setup/status` to decide Initial Setup redirects.
-- If `setupStatus.required === true`, redirect non-setup routes to `/setup`.
-- If `setupStatus.required === false`, app routes proceed even when `restartRequired === true`.
-- `restartRequired === true` with `setupStatus.required === true` means saved initial setup is waiting for restart; `/setup` shows the restart-required final page.
-- `restartRequired === true` with `setupStatus.required === false` means a settings-page change requires restart; allow normal app use and show restart messaging in settings/app chrome.
-- Backend unreachable should show a useful error state, not an infinite redirect.
-- Avoid redirect loops for `/setup` and `/settings`.
-
-Setup page behavior:
-
-- Server load fetches `GET /settings`, `GET /setup/status`, and `GET /restart-required`.
-- `SetupWizard` receives `setupStatus` and `restartRequired`.
-- If `restartRequired === true` and `setupStatus.required === true`, open directly to the final restart-required page.
-- If `restartRequired === true` and `setupStatus.required === false`, do not force the final setup page; that state belongs to the settings/app restart notice.
-- Disable further final saves while showing the restart-required page.
-- After save success, keep showing the local restart-required state immediately; future reloads should get it from `GET /restart-required`.
-
-Acceptance criteria:
-
-- `GET /restart-required` returns `false` by default.
-- Fresh app-state defaults to `initial_setup_complete = false`.
-- Completing initial setup sets `restart_required = true`.
-- Completing initial setup does not set `initial_setup_complete = true` until backend restart.
-- Backend startup with complete saved configuration sets `initial_setup_complete = true` and clears `restart_required`.
-- Backend startup with incomplete saved configuration leaves or sets `initial_setup_complete = false`.
-- Changing a restart-applied setting sets `restart_required = true`.
-- Changing only `prefer_extended` does not set `restart_required = true`.
-- Settings-page changes that require restart do not set `initial_setup_complete = false`.
-- Visiting an app route with incomplete setup redirects to `/setup`.
-- Visiting `/setup` does not redirect-loop.
-- Visiting settings while restart is required does not redirect-loop.
-- Saved setup plus backend restart allows normal app navigation.
-- Saved setup without backend restart shows the setup restart-required state.
-- Restart-required settings changes after Initial Setup do not force app routes back to `/setup`.
-
-Validation:
-
-- Add or update backend tests for the restart-required endpoint and settings-save flag behavior.
-- Add or update backend tests for `initial_setup_complete` startup behavior.
-- Add or update backend tests for setup status `configuration_complete`, `complete`, and `required` combinations.
-- Start the backend and regenerate frontend OpenAPI types:
-  ```bash
-  cd frontend
-  pnpm generate-types
-  ```
-- Review `frontend/src/lib/types/api.d.ts` after generation.
-- Run frontend build.
-- Manual checks:
-  - incomplete setup -> app route redirects
-  - `/setup` direct load works
-  - `/settings` direct load works while restart is required
-  - saved setup before restart -> restart-required state
-  - saved setup after restart -> app route loads
-
-### Milestone 6: Settings Restart Required UX
-
-Show **Restart Required** on the Settings page when the backend restart-required flag is true.
-
-Files:
-
 - `frontend/src/routes/(app)/settings/+page.server.ts`
 - `frontend/src/routes/(app)/settings/+page.svelte`
 
-Backend remains the source of truth. Do not rely on frontend-only snapshot comparison for restart-required state.
+Work:
 
-Steps:
+- Fetch `GET /app-state` where route decisions or restart messaging need it.
+- Replace setup-status route guard logic with app-state logic.
+- Show setup restart-required state from app-state.
+- Show settings restart warning from app-state.
 
-1. Fetch `GET /settings` and `GET /restart-required` in the settings page server load.
-2. Show a persistent **Restart Required** message when `restartRequired === true`.
-3. On save success, call `GET /restart-required` again.
-4. Show **Restart Required** if the refetched value is true; otherwise show the normal "Settings saved." message.
-5. Tell Docker Compose users to restart the backend/app container.
-6. Do not block saving non-restart settings.
+### 4. API Types And Validation
 
-Restart-applied settings are owned by the backend flag logic:
+After backend contract changes:
 
-- `media_data_location`
-- `qbt_hostname`
-- `qbt_username`
-- `qbt_password`
-- `qbt_path_local`
-- `qbt_path_remote`
-- `qbt_category`
-- `qbt_download_location`
-- `qbt_polling_rate`
-- `log_level`
+```bash
+cd frontend
+pnpm generate-types
+pnpm build
+```
 
-`prefer_extended` does not require restart because download requests already read the current setting when they start.
+Backend validation:
 
-Acceptance criteria:
+```bash
+cd backend
+pytest tests/test_setup_validation.py tests/test_settings_api.py tests/test_db.py
+```
 
-- Loading settings while `GET /restart-required` returns true shows a persistent **Restart Required** message.
-- Changing qBittorrent connection fields shows **Restart Required** after save because the backend flag becomes true.
-- Changing media data location shows **Restart Required** after save because the backend flag becomes true.
-- Changing only `prefer_extended` shows normal "Settings saved."
-- Password masking does not produce false positives when the value is the unchanged masked placeholder.
-- Environment-overridden settings remain disabled as today.
+Run broader tests if the lifecycle changes touch download-manager startup behavior.
 
-Validation:
+## Test Checklist
 
-- Run frontend build.
-- Manual check initial settings load with restart-required true.
-- Manual check restart vs non-restart settings.
+Backend tests should cover:
 
-### Milestone 7: Runtime Placement Error Surfacing
+- `GET /app-state` default response.
+- Startup with incomplete effective settings sets `initial_setup_complete = false` and `restart_required = false`.
+- Startup with complete effective settings sets `initial_setup_complete = true` and `restart_required = false`.
+- Env vars count toward required Initial Setup configuration.
+- One-sided qBittorrent path mapping makes Initial Setup configuration incomplete.
+- Completing Initial Setup through `PUT /settings` sets `restart_required = true` and leaves `initial_setup_complete = false`.
+- Changing a Restart-Applied Setting after Initial Setup sets `restart_required = true`.
+- Changing only `prefer_extended` does not set `restart_required = true`.
+- Env-overridden fields are not written back into SQLite during save.
+- Masked qBittorrent password does not create a false positive settings change.
 
-Make runtime path mapping or media placement failures visible instead of only logging them.
+Manual checks:
 
-Files to consider:
-
-- `backend/download_manager.py`
-- `backend/db.py`
-- `backend/api.py`
-- `frontend/src/routes/(app)/downloads/+page.svelte`
-- SSE status handling
-
-Desired behavior when `_add_episode_to_data_location()` fails:
-
-- Mark episode download as `error`.
-- Store or expose a useful error message if the current schema supports it.
-- Broadcast an SSE status update.
-- Keep the poller alive.
-
-Acceptance criteria:
-
-- Bad qBittorrent path mapping produces visible error status.
-- Poller does not crash.
-- Error is not swallowed as only a log line.
-- Existing happy path still hardlinks/copies as before.
-
-Validation:
-
-- Add or update unit tests for failed placement marking episode `error`.
-- Add or update unit tests for poller event on placement failure.
-- Manually check downloads UI if the existing UI supports `Error` status.
-
-## Final Integration Checklist
-
-Use a fresh DB or reset settings, then verify:
-
-1. Backend starts.
-2. Frontend starts.
-3. Visiting an app route redirects to `/setup`.
-4. Wizard loads current/default settings.
-5. Media validation works.
-6. qBittorrent validation works.
-7. Empty path mapping validates.
-8. One-sided path mapping fails.
-9. Settings save succeeds.
-10. Setup save sets `restart_required = true`.
-11. Setup save leaves `initial_setup_complete = false`.
-12. `GET /setup/status` reports `configuration_complete = true`, `complete = false`, and `required = true` before restart.
-13. `GET /restart-required` returns `true` before restart.
-14. Restart-required completion screen appears.
-15. Backend/container restart sets `initial_setup_complete = true`, clears `restart_required`, and applies settings.
-16. `GET /setup/status` reports `complete = true` and `required = false` after restart.
-17. `GET /restart-required` returns `false` after restart.
-18. Settings page shows the restart-required message while the flag is true.
-19. Frontend OpenAPI types include `GET /restart-required` and any setup-status shape changes.
-20. Changing a restart-applied setting from Settings sets `restart_required = true`.
-21. Changing a restart-applied setting from Settings does not set `initial_setup_complete = false`.
-22. Changing only `prefer_extended` does not set `restart_required = true`.
-23. App routes keep loading during later settings-page restart-required state.
-24. App routes load after initial setup restart.
-25. Download-manager routes behave normally after restart.
-26. No auth fields appear.
-27. No secrets are displayed in logs or UI.
-28. Dark/light UI both remain acceptable.
-
-## Working Notes
-
-- Keep changes small and coherent.
-- Prefer existing route-local fetch patterns over new shared client abstractions.
-- Keep backend and frontend terminology aligned.
-- Regenerate OpenAPI types only after backend contract changes; for this plan, regenerate after adding `GET /restart-required` and after changing the setup-status response shape.
-- Do not hand-edit generated API types.
-- Do not mix runtime placement-error handling into the wizard milestones unless needed for a specific bug.
+- Fresh DB redirects app routes to `/setup`.
+- Saving valid setup shows the restart-required setup completion state.
+- Restarting the backend after saving setup allows normal app navigation.
+- Later restart-required Settings changes do not redirect app routes to `/setup`.
+- Settings page shows Restart Required only when app-state says it should.
+- No secrets are displayed in UI or logs.

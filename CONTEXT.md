@@ -9,12 +9,16 @@ The required configuration flow and backend restart completed before Pace Downlo
 _Avoid_: first-run setup, setup wizard, setup flow
 
 **Restart Required**:
-The temporary state after setup settings are saved but before the backend has restarted and applied them.
+The temporary state after saved settings need a backend restart before the running process has applied them. This can happen after Initial Setup is saved, or after a later Restart-Applied Setting changes.
 _Avoid_: setup complete, ready
 
 **Restart-Applied Setting**:
 A setting change that requires a backend restart before Pace Downloader's runtime services use the new value.
 _Avoid_: core setting, important setting
+
+**Effective Setting**:
+The setting value Pace Downloader should use after applying environment variable overrides on top of the stored SQLite value.
+_Avoid_: db setting, saved value
 
 **Media Data Location**:
 The path visible to Pace Downloader where organized One Pace episode files are placed.
@@ -35,8 +39,10 @@ _Avoid_: media mapping, Jellyfin mapping
 ## Relationships
 
 - **Initial Setup** configures the media storage location and qBittorrent connection used by Pace Downloader.
-- **Restart Required** occurs before **Initial Setup** is complete.
+- **Restart Required** occurs before **Initial Setup** is complete when setup was saved but not restarted.
+- **Restart Required** can also occur after **Initial Setup** when a changed **Restart-Applied Setting** has not been applied by a backend restart.
 - A changed **Restart-Applied Setting** creates **Restart Required**.
+- **Effective Setting** values decide whether **Initial Setup** has enough configuration; environment variables count.
 - **Media Data Location** is owned from Pace Downloader's filesystem perspective; Jellyfin may mount the same data at a different path.
 - **qBittorrent Path Mapping** is required only when qBittorrent reports paths that Pace Downloader cannot use directly.
 - **qBittorrent Path Mapping** translates paths from **qBittorrent Remote Path** to **qBittorrent Local Path**.
