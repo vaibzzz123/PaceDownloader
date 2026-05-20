@@ -9,7 +9,7 @@
 		<script>
 			try {
 				const s = JSON.parse(localStorage.getItem('app-state') || '{}');
-				if (s.darkMode) document.documentElement.classList.add('dark');
+				if (s.darkMode !== false) document.documentElement.classList.add('dark');
 				if (s.spoilerMode) document.documentElement.classList.add('spoiler');
 			} catch {}
 		</script>

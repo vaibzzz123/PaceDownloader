@@ -9,7 +9,7 @@ function loadState() {
 }
 
 const defaults = {
-  darkMode: false,
+  darkMode: true,
   spoilerMode: false
 };
 
