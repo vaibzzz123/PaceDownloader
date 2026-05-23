@@ -183,7 +183,7 @@ def test_metadata_sync_route_returns_summary(monkeypatch):
     monkeypatch.setattr(
         api.db,
         "get_settings",
-        lambda: {"media_data_location": {"value": "/tmp/one-pace-media"}},
+        lambda *, with_env_overrides=True: {"media_data_location": {"value": "/tmp/one-pace-media"}},
     )
     monkeypatch.setattr(api.asyncio, "to_thread", fake_to_thread)
     monkeypatch.setattr(

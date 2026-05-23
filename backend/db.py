@@ -443,9 +443,9 @@ def _get_env_value(field: str):
     return env_val
 
 
-def get_settings() -> dict | None:
+def get_settings(*, with_env_overrides: bool = True) -> dict | None:
     """
-    Get settings with environment variable overrides.
+    Get settings, optionally with environment variable overrides.
 
     Returns a dict where each setting has:
       - value: the effective value (env override if set, else db value)
@@ -463,6 +463,10 @@ def get_settings() -> dict | None:
     result = {}
     for field in SETTINGS_FIELDS:
         db_value = db_settings.get(field)
+        if not with_env_overrides:
+            result[field] = {"value": db_value, "env_override": False}
+            continue
+
         env_value = _get_env_value(field)
 
         if env_value is not None:

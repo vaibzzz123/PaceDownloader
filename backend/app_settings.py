@@ -19,8 +19,8 @@ SETTINGS_REQUIRING_RESTART = (
 )
 
 
-def get_settings() -> dict | None:
-    return db.get_settings()
+def get_settings(*, with_env_overrides: bool = True) -> dict | None:
+    return db.get_settings(with_env_overrides=with_env_overrides)
 
 
 def get_setting_value(field: str) -> Any:
@@ -51,22 +51,44 @@ def save_settings(
     log_level: str = "INFO",
 ):
     settings_before = get_settings()
+    stored_settings_before = db.get_settings(with_env_overrides=False) or {}
+    submitted_settings = {
+        "media_data_location": media_data_location,
+        "qbt_hostname": qbt_hostname,
+        "qbt_username": qbt_username,
+        "qbt_password": qbt_password,
+        "prefer_extended": prefer_extended,
+        "qbt_path_local": qbt_path_local,
+        "qbt_path_remote": qbt_path_remote,
+        "qbt_category": qbt_category,
+        "qbt_download_location": qbt_download_location,
+        "qbt_polling_rate": qbt_polling_rate,
+        "log_level": log_level,
+    }
+    settings_to_save = {
+        field: (
+            _setting_value(stored_settings_before, field)
+            if _setting_env_override(settings_before, field)
+            else value
+        )
+        for field, value in submitted_settings.items()
+    }
     db.save_settings(
-        media_data_location=media_data_location,
-        qbt_hostname=qbt_hostname,
-        qbt_username=qbt_username,
-        qbt_password=qbt_password,
-        prefer_extended=prefer_extended,
-        qbt_path_local=qbt_path_local,
-        qbt_path_remote=qbt_path_remote,
-        qbt_category=qbt_category,
-        qbt_download_location=qbt_download_location,
-        qbt_polling_rate=qbt_polling_rate,
-        log_level=log_level,
+        **settings_to_save,
     )
     settings_after = get_settings()
     _update_app_state_after_settings_save(settings_before, settings_after)
     return settings_after
+
+
+def _setting_env_override(settings: dict[str, Any] | None, field: str) -> bool:
+    if not settings:
+        return False
+
+    field_data = settings.get(field)
+    if isinstance(field_data, dict):
+        return bool(field_data.get("env_override"))
+    return False
 
 
 # May merge into get_setting_value, but doing so duplicates db calls
