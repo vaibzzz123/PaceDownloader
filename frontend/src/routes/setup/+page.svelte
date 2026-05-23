@@ -1,12 +1,14 @@
 <script lang="ts">
   import { PUBLIC_BACKEND_URL } from '$env/static/public';
-  import SetupWizard from "$lib/components/SetupWizard/SetupWizard.svelte";
+  import CheckIcon from '@lucide/svelte/icons/check';
+  import SetupWizard from '$lib/components/SetupWizard/SetupWizard.svelte';
 
   import type { PageProps } from './$types';
   import type { components } from '$lib/types/api';
 
   let { data }: PageProps = $props();
 
+  type AppStateResponse = components['schemas']['AppStateResponse'];
   type SettingsSaveRequest = components['schemas']['SettingsSaveRequest'];
   type SetupMediaValidationRequest = components['schemas']['SetupMediaValidationRequest'];
   type SetupQbittorrentValidationRequest =
@@ -94,7 +96,18 @@
     return postValidation('/setup/validate/path-mapping', payload);
   }
 
-  async function saveSettings(payload: SettingsSaveRequest): Promise<void> {
+  async function fetchAppState(): Promise<AppStateResponse> {
+    const response = await fetch(`${PUBLIC_BACKEND_URL}/app-state`);
+    const body = await parseResponseBody(response);
+
+    if (!response.ok) {
+      throw new Error(errorTextFromBody(body, 'Failed to load app state.'));
+    }
+
+    return body as AppStateResponse;
+  }
+
+  async function saveSettings(payload: SettingsSaveRequest): Promise<AppStateResponse> {
     let response: Response;
 
     try {
@@ -112,15 +125,33 @@
     if (!response.ok) {
       throw new Error(errorTextFromBody(body, 'Failed to save settings.'));
     }
+
+    return fetchAppState();
   }
 </script>
 
 <main class="flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-  <SetupWizard
-    settings={data.settings}
-    {validateMedia}
-    {validateQbittorrent}
-    {validatePathMapping}
-    {saveSettings}
-  />
+  {#if !data.appState.initial_setup_complete && data.appState.restart_required}
+    <section class="card bg-surface-100-900 mx-auto flex w-full max-w-180 flex-col items-center gap-4 p-6 text-center shadow-xl sm:p-8">
+      <div class="preset-filled-primary-500 flex size-12 items-center justify-center rounded-full">
+        <CheckIcon class="size-6" />
+      </div>
+      <div class="flex flex-col gap-2">
+        <p class="text-sm font-medium">Initial setup</p>
+        <h1 class="text-2xl font-bold">Restart required</h1>
+        <p class="text-sm">
+          Restart the Pace Downloader backend or Docker container to apply the saved setup.
+        </p>
+      </div>
+    </section>
+  {:else}
+    <SetupWizard
+      settings={data.settings}
+      appState={data.appState}
+      {validateMedia}
+      {validateQbittorrent}
+      {validatePathMapping}
+      {saveSettings}
+    />
+  {/if}
 </main>

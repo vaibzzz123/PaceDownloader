@@ -14,9 +14,11 @@
     components['schemas']['SetupPathMappingValidationRequest'];
   type SetupValidationResponse = components['schemas']['SetupValidationResponse'];
   type SettingsSaveRequest = components['schemas']['SettingsSaveRequest'];
+  type AppStateResponse = components['schemas']['AppStateResponse'];
 
   type Props = {
     settings: SettingsResponse;
+    appState: AppStateResponse;
     validateMedia: (payload: SetupMediaValidationRequest) => Promise<SetupValidationResponse>;
     validateQbittorrent: (
       payload: SetupQbittorrentValidationRequest
@@ -24,11 +26,17 @@
     validatePathMapping: (
       payload: SetupPathMappingValidationRequest
     ) => Promise<SetupValidationResponse>;
-    saveSettings: (payload: SettingsSaveRequest) => Promise<void>;
+    saveSettings: (payload: SettingsSaveRequest) => Promise<AppStateResponse>;
   };
 
-  let { settings, validateMedia, validateQbittorrent, validatePathMapping, saveSettings }: Props =
-    $props();
+  let {
+    settings,
+    appState,
+    validateMedia,
+    validateQbittorrent,
+    validatePathMapping,
+    saveSettings,
+  }: Props = $props();
 
   type Step = {
     id: string;
@@ -94,7 +102,7 @@
   let validating = $state(false);
   let saving = $state(false);
   let saveError = $state<string | null>(null);
-  let restartNoticeVisible = $state(false);
+  let currentAppState = $derived(appState);
   let validationMessages = $state<Record<ValidationStepId, ValidationMessage | null>>({
     media: null,
     qbt: null,
@@ -102,6 +110,9 @@
   });
 
   const isFinalStep = $derived(currentStep === steps.length);
+  const restartNoticeVisible = $derived(
+    !currentAppState.initial_setup_complete && currentAppState.restart_required
+  );
 
   function setValidationMessage(stepId: ValidationStepId, message: ValidationMessage): boolean {
     validationMessages[stepId] = message;
@@ -209,7 +220,6 @@
         if (!isValid) return;
 
         currentStep += 1;
-        restartNoticeVisible = false;
       }
     } finally {
       validating = false;
@@ -237,8 +247,7 @@
     };
 
     try {
-      await saveSettings(payload);
-      restartNoticeVisible = true;
+      currentAppState = await saveSettings(payload);
     } catch (error) {
       saveError = error instanceof Error ? error.message : 'Failed to save settings.';
     } finally {

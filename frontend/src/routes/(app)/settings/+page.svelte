@@ -1,10 +1,11 @@
 <script lang="ts">
   import { PUBLIC_BACKEND_URL } from '$env/static/public';
-  import AlertTriangleIcon from "@lucide/svelte/icons/alert-triangle";
-  import type { PageProps } from "./$types";
+  import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
+  import type { PageProps } from './$types';
 
   let { data }: PageProps = $props();
 
+  let appState = $derived(data.appState);
   let mediaDataLocation = $derived((data.settings.media_data_location.value as string) ?? '');
   let preferExtended = $derived(Boolean(data.settings.prefer_extended.value));
   let qbtHostname = $derived((data.settings.qbt_hostname.value as string) ?? '');
@@ -20,6 +21,15 @@
   let saveError = $state<string | null>(null);
   let saving = $state(false);
   let saved = $state(false);
+  let restartRequired = $derived(
+    appState.initial_setup_complete === true && appState.restart_required === true
+  );
+
+  async function fetchAppState() {
+    const res = await fetch(`${PUBLIC_BACKEND_URL}/app-state`);
+    if (!res.ok) throw new Error('Failed to load app state');
+    appState = await res.json();
+  }
 
   async function saveSettings() {
     saving = true;
@@ -47,7 +57,8 @@
         const body = await res.json().catch(() => ({}));
         saveError = body.detail ?? 'Failed to save settings';
       } else {
-        saved = true;
+        await fetchAppState();
+        saved = !restartRequired;
       }
     } catch {
       saveError = 'Could not reach the server';
@@ -67,6 +78,12 @@
 
 {#if saveError}
   <div class="preset-tonal-error rounded p-3 text-sm mt-3">{saveError}</div>
+{/if}
+{#if restartRequired}
+  <div class="preset-tonal-warning rounded p-3 text-sm mt-3 flex max-w-3xl items-start gap-2">
+    <AlertTriangleIcon class="size-5 shrink-0" />
+    <span>Restart the Pace Downloader backend or Docker container to apply these settings.</span>
+  </div>
 {/if}
 {#if saved}
   <div class="preset-tonal-success rounded p-3 text-sm mt-3">Settings saved.</div>
