@@ -48,7 +48,7 @@ def test_save_settings_route_preserves_password_when_mask_is_submitted(mock_app_
     from api import save_settings_route
 
     mock_app_settings.get_stored_setting_value.return_value = "real-password"
-    mock_app_settings.get_settings.return_value = _settings("real-password")
+    mock_app_settings.save_settings.return_value = _settings("real-password")
 
     result = save_settings_route(_save_request())
 
@@ -60,12 +60,24 @@ def test_save_settings_route_preserves_password_when_mask_is_submitted(mock_app_
 def test_save_settings_route_saves_new_password_when_changed(mock_app_settings):
     from api import save_settings_route
 
-    mock_app_settings.get_settings.return_value = _settings("new-password")
+    mock_app_settings.save_settings.return_value = _settings("new-password")
 
     result = save_settings_route(_save_request("new-password"))
 
     assert mock_app_settings.save_settings.call_args.kwargs["qbt_password"] == "new-password"
     assert result.qbt_password.value == "********"
+
+
+@patch("api.db")
+def test_get_app_state_route_returns_lifecycle_flags(mock_db):
+    from api import get_app_state_route
+
+    mock_db.get_app_state.return_value = {"initial_setup_complete": False, "restart_required": True}
+
+    result = get_app_state_route()
+
+    assert result.initial_setup_complete is False
+    assert result.restart_required is True
 
 
 @patch("api.validate_qbittorrent_connection")

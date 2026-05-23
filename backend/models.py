@@ -79,6 +79,11 @@ class SettingsResponse(BaseModel):
     log_level: SettingField
 
 
+class AppStateResponse(BaseModel):
+    initial_setup_complete: bool
+    restart_required: bool
+
+
 class SettingsSaveRequest(BaseModel):
     media_data_location: str
     prefer_extended: bool

@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
-from setup_validation import build_setup_status
+from setup_validation import is_initial_setup_configuration_complete
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,10 +16,8 @@ from logging_config import get_logger, setup_logging
 
 # Initialize database and logging before other imports that may log
 db.initialize_db()
-db.set_restart_required(False)
-
-is_initial_setup_required = app_settings.is_initial_setup_required()
-db.set_initial_setup_complete(not is_initial_setup_required)
+initial_setup_complete = is_initial_setup_configuration_complete(app_settings.get_settings())
+db.set_app_state(initial_setup_complete=initial_setup_complete, restart_required=False)
 log_level = app_settings.get_setting_value("log_level") or "INFO"
 setup_logging(log_level)
 
@@ -34,10 +32,9 @@ from events import downloads_broadcaster, metadata_broadcaster
 
 logger.info("Starting Pace Downloader backend")
 
-initial_setup_required = app_settings.is_initial_setup_required()
 download_manager: DownloadManager | None = None
 
-if initial_setup_required:
+if not initial_setup_complete:
     logger.warning("Initial setup is required; skipping qBittorrent client, download manager, polling, and startup scan")
 else:
     logger.info("Initial setup is complete; initializing qBittorrent client and download manager")

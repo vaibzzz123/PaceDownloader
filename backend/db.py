@@ -213,6 +213,34 @@ def set_restart_required(required: bool):
         con.commit()
 
 
+def get_app_state() -> dict[str, bool]:
+    with get_db() as con:
+        row = con.execute(
+            "SELECT initial_setup_complete, restart_required FROM app_state WHERE singleton = 1"
+        ).fetchone()
+        if not row:
+            return {"initial_setup_complete": False, "restart_required": False}
+        return {
+            "initial_setup_complete": bool(row["initial_setup_complete"]),
+            "restart_required": bool(row["restart_required"]),
+        }
+
+
+def set_app_state(initial_setup_complete: bool, restart_required: bool):
+    with get_db() as con:
+        con.execute(
+            """
+            INSERT INTO app_state (singleton, initial_setup_complete, restart_required)
+            VALUES (1, ?, ?)
+            ON CONFLICT(singleton) DO UPDATE SET
+                initial_setup_complete = excluded.initial_setup_complete,
+                restart_required = excluded.restart_required
+            """,
+            (int(initial_setup_complete), int(restart_required)),
+        )
+        con.commit()
+
+
 def is_initial_setup_complete() -> bool:
     with get_db() as con:
         row = con.execute("SELECT initial_setup_complete FROM app_state WHERE singleton = 1").fetchone()
@@ -410,7 +438,8 @@ def _get_env_value(field: str):
         try:
             return int(env_val)
         except ValueError:
-            logger.warning("Invalid QBT_POLLING_RATE value %s, using default", env_val)
+            logger.warning("Invalid QBT_POLLING_RATE value %s, using stored value", env_val)
+            return None
     return env_val
 
 

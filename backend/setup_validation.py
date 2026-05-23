@@ -36,6 +36,24 @@ def _is_populated(value: Any) -> bool:
     return True
 
 
+# TODO: Down the line, can also validate if qbt etc. is working if env var changes
+# But for now, will only validate if user goes through setup wizard
+def is_initial_setup_configuration_complete(settings: dict[str, Any] | None) -> bool:
+    media_location = _setting_value(settings, "media_data_location")
+    qbt_hostname = _setting_value(settings, "qbt_hostname")
+    local_path = _setting_value(settings, "qbt_path_local")
+    remote_path = _setting_value(settings, "qbt_path_remote")
+
+    has_local_path = _is_populated(local_path)
+    has_remote_path = _is_populated(remote_path)
+
+    return (
+        _is_populated(media_location)
+        and _is_populated(qbt_hostname)
+        and has_local_path == has_remote_path
+    )
+
+
 def build_setup_status(settings: dict[str, Any] | None) -> SetupStatusResponse:
     steps: list[SetupStepStatus] = []
 

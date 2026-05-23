@@ -11,6 +11,7 @@ from models import (
     SettingField,
     SettingsResponse,
     SettingsSaveRequest,
+    AppStateResponse,
     ScanResultResponse,
     MetadataSyncResponse,
     SetupStatusResponse,
@@ -57,6 +58,7 @@ def construct_settings_response_with_masked_password(settings: dict) -> Settings
         response_settings["qbt_password"]["value"] = MASKED_PASSWORD
     return SettingsResponse(**{k: SettingField(**v) for k, v in response_settings.items()})
 
+
 @router.get("/health")
 async def health():
     checks = {}
@@ -80,6 +82,12 @@ async def health():
     status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
     code = 200 if status == "ok" else 503
     return JSONResponse({"status": status, "checks": checks}, status_code=code)
+
+
+@router.get("/app-state", response_model=AppStateResponse)
+def get_app_state_route():
+    return AppStateResponse(**db.get_app_state())
+
 
 @router.get("/season", response_model=list[SeasonResponse])
 def get_seasons_route():
@@ -381,7 +389,7 @@ def save_settings_route(req: SettingsSaveRequest):
     qbt_password = req.qbt_password
     if qbt_password == MASKED_PASSWORD:
         qbt_password = app_settings.get_stored_setting_value("qbt_password") or ""
-    app_settings.save_settings(
+    settings = app_settings.save_settings(
         media_data_location=req.media_data_location,
         qbt_hostname=req.qbt_hostname,
         qbt_username=req.qbt_username,
@@ -394,7 +402,8 @@ def save_settings_route(req: SettingsSaveRequest):
         qbt_polling_rate=req.qbt_polling_rate,
         log_level=req.log_level,
     )
-    settings = app_settings.get_settings()
+    if settings is None:
+        raise HTTPException(status_code=500, detail="Settings not found")
     return construct_settings_response_with_masked_password(settings)
 
 

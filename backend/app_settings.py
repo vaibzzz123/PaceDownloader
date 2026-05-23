@@ -1,6 +1,22 @@
 from typing import Any
 
 import db
+from setup_validation import is_initial_setup_configuration_complete
+
+# Changes to these settings only take effect after the backend process restarts.
+# prefer_extended is intentionally omitted because download requests read it when they start.
+SETTINGS_REQUIRING_RESTART = (
+    "media_data_location",
+    "qbt_hostname",
+    "qbt_username",
+    "qbt_password",
+    "qbt_path_local",
+    "qbt_path_remote",
+    "qbt_category",
+    "qbt_download_location",
+    "qbt_polling_rate",
+    "log_level",
+)
 
 
 def get_settings() -> dict | None:
@@ -18,9 +34,7 @@ def get_stored_setting_value(field: str) -> Any:
 
 def is_initial_setup_required() -> bool:
     settings = get_settings()
-    media_location_value = _setting_value(settings, "media_data_location")
-    qbt_hostname_value = _setting_value(settings, "qbt_hostname")
-    return not media_location_value or not qbt_hostname_value
+    return not is_initial_setup_configuration_complete(settings)
 
 
 def save_settings(
@@ -36,6 +50,7 @@ def save_settings(
     qbt_polling_rate: int = 8,
     log_level: str = "INFO",
 ):
+    settings_before = get_settings()
     db.save_settings(
         media_data_location=media_data_location,
         qbt_hostname=qbt_hostname,
@@ -49,6 +64,9 @@ def save_settings(
         qbt_polling_rate=qbt_polling_rate,
         log_level=log_level,
     )
+    settings_after = get_settings()
+    _update_app_state_after_settings_save(settings_before, settings_after)
+    return settings_after
 
 
 # May merge into get_setting_value, but doing so duplicates db calls
@@ -64,3 +82,32 @@ def _setting_value(settings: dict[str, Any] | None, field: str) -> Any:
         value = field_data
 
     return value
+
+
+def _restart_required_setting_changed(
+    settings_before: dict[str, Any] | None,
+    settings_after: dict[str, Any] | None,
+) -> bool:
+    return any(
+        _setting_value(settings_before, field) != _setting_value(settings_after, field)
+        for field in SETTINGS_REQUIRING_RESTART
+    )
+
+
+def _update_app_state_after_settings_save(
+    settings_before: dict[str, Any] | None,
+    settings_after: dict[str, Any] | None,
+):
+    current_state = db.get_app_state()
+    initial_setup_complete = current_state["initial_setup_complete"]
+
+    if not initial_setup_complete:
+        setup_complete_after_save = is_initial_setup_configuration_complete(settings_after)
+        db.set_app_state(
+            initial_setup_complete=False,
+            restart_required=setup_complete_after_save,
+        )
+        return
+
+    if _restart_required_setting_changed(settings_before, settings_after):
+        db.set_restart_required(True)

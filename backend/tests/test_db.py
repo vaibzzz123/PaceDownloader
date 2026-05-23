@@ -28,6 +28,23 @@ def test_restart_required_helpers_round_trip_boolean(monkeypatch, tmp_path):
     assert db.is_restart_required() is False
 
 
+def test_app_state_helpers_round_trip_boolean(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
+    db.initialize_db()
+
+    assert db.get_app_state() == {
+        "initial_setup_complete": False,
+        "restart_required": False,
+    }
+
+    db.set_app_state(initial_setup_complete=True, restart_required=True)
+
+    assert db.get_app_state() == {
+        "initial_setup_complete": True,
+        "restart_required": True,
+    }
+
+
 def test_initial_setup_complete_helpers_round_trip_boolean(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
     db.initialize_db()

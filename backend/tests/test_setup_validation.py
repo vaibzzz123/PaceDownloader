@@ -6,6 +6,7 @@ from models import SetupMediaValidationRequest
 from setup_validation import (
     QBT_VALIDATION_TIMEOUT_SECONDS,
     build_setup_status,
+    is_initial_setup_configuration_complete,
     validate_media_location,
     validate_path_mapping,
     validate_qbittorrent_connection,
@@ -55,6 +56,32 @@ def test_build_setup_status_reports_one_sided_path_mapping():
     assert status.complete is False
     assert paths_step.complete is False
     assert paths_step.errors == ["qbt_path_local and qbt_path_remote must be set together"]
+
+
+def test_initial_setup_configuration_requires_media_and_qbittorrent_hostname():
+    assert is_initial_setup_configuration_complete({}) is False
+
+
+def test_initial_setup_configuration_accepts_env_style_effective_settings():
+    assert is_initial_setup_configuration_complete(
+        {
+            "media_data_location": {"value": "/media", "env_override": True},
+            "qbt_hostname": {"value": "http://qbittorrent:8080", "env_override": True},
+            "qbt_path_local": {"value": "", "env_override": False},
+            "qbt_path_remote": {"value": "", "env_override": False},
+        }
+    ) is True
+
+
+def test_initial_setup_configuration_rejects_one_sided_path_mapping():
+    assert is_initial_setup_configuration_complete(
+        {
+            "media_data_location": {"value": "/media", "env_override": False},
+            "qbt_hostname": {"value": "http://qbittorrent:8080", "env_override": False},
+            "qbt_path_local": {"value": "/downloads", "env_override": False},
+            "qbt_path_remote": {"value": "", "env_override": False},
+        }
+    ) is False
 
 
 def test_validate_media_location_accepts_writable_directory(tmp_path):
