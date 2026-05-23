@@ -87,7 +87,7 @@ def build_setup_status(settings: dict[str, Any] | None) -> SetupStatusResponse:
         for step in steps
         for field in step.missing_fields
     ]
-    complete = all(step.complete for step in steps)
+    complete = is_initial_setup_configuration_complete(settings)
     return SetupStatusResponse(
         required=not complete,
         complete=complete,
