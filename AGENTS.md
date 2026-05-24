@@ -78,7 +78,7 @@ npx ctx7@latest docs <libraryId> "<user question>"
 - Follow the existing Svelte 5 style: use runes like `$state`, `$derived`, and `$effect` instead of introducing older store-heavy patterns unless the surrounding code already uses them.
 - For Svelte/SvelteKit documentation or API questions, use the Svelte MCP workflow above instead of generic library lookup.
 - Data is commonly fetched in `+page.server.ts` files, then copied into local mutable state so SSE updates can patch rows in place without full reloads.
-- Keep frontend API calls route-owned: server loads belong in `+page.server.ts`, and client-side fetch/action helpers belong in the route `+page.svelte`. Reusable components should receive typed data and callback props rather than importing `PUBLIC_BACKEND_URL` or calling backend endpoints directly.
+- Keep frontend API calls route-owned: server loads belong in `+page.server.ts` and should use the server-only backend helper for FastAPI calls. Client-side fetch/action helpers belong in the route `+page.svelte` and should use same-origin `/api/...` paths. Reusable components should receive typed data and callback props rather than calling backend endpoints directly.
 - The season and downloads pages depend on SSE status payloads from the backend. If backend event names or status strings change, update the frontend maps at the same time.
 - Keep using the existing UI stack and patterns:
   - Skeleton UI components/utilities
@@ -86,7 +86,8 @@ npx ctx7@latest docs <libraryId> "<user question>"
   - Tailwind CSS 4 utilities and existing theme files
   - Fuse.js-backed search behavior in reusable tables
   - table-based reusable components like `ColorTable`
-  - `PUBLIC_BACKEND_URL` for backend requests
+  - Same-origin `/api/...` requests for browser-side backend calls
+  - Same-origin `/posters/...` image URLs for poster assets
 - Quote shell paths that include route params such as `frontend/src/routes/season/[id]/+page.svelte` when using `zsh`, or the shell will treat brackets as globs.
 
 ## API And Types

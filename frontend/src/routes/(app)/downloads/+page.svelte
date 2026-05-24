@@ -3,7 +3,6 @@
   import { invalidateAll } from "$app/navigation";
   import { browser } from '$app/environment';
   import { untrack } from 'svelte';
-  import { PUBLIC_BACKEND_URL } from '$env/static/public';
   import { SvelteSet } from 'svelte/reactivity';
   import { Tabs } from "@skeletonlabs/skeleton-svelte";
   import ColorTable from "$lib/components/ColorTable/ColorTable.svelte";
@@ -52,7 +51,7 @@
 
   $effect(() => {
     if (!browser) return;
-    const source = new EventSource(`${PUBLIC_BACKEND_URL}/events/downloads`);
+    const source = new EventSource('/api/events/downloads');
     source.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
@@ -99,7 +98,7 @@
     loadingIds.add(id);
     error = null;
     try {
-      const res = await fetch(`${PUBLIC_BACKEND_URL}${path}`, { method });
+      const res = await fetch(`/api${path}`, { method });
       if (res.ok) {
         if (onSuccess) await onSuccess(res);
       } else {

@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { PUBLIC_BACKEND_URL } from '$env/static/public';
+import { getBackendUrl } from '$lib/server/backend';
 
 import type { PageServerLoad } from './$types';
 import type { components } from '$lib/types/api';
@@ -9,8 +9,8 @@ type EpisodeResponse = components['schemas']['EpisodeResponse'];
 
 export const load: PageServerLoad = async ({ fetch, params }) => {
   const [seasonRes, episodesRes] = await Promise.all([
-    fetch(`${PUBLIC_BACKEND_URL}/season/${params.id}`),
-    fetch(`${PUBLIC_BACKEND_URL}/season/${params.id}/episodes`),
+    fetch(getBackendUrl(`/season/${params.id}`)),
+    fetch(getBackendUrl(`/season/${params.id}/episodes`)),
   ]);
 
   if (!seasonRes.ok) error(seasonRes.status, 'Failed to load season');
@@ -19,6 +19,5 @@ export const load: PageServerLoad = async ({ fetch, params }) => {
   const season: SeasonResponse = await seasonRes.json();
   const episodes: EpisodeResponse[] = await episodesRes.json();
 
-  season.image = `${PUBLIC_BACKEND_URL}${season.image}`;
   return { season, episodes };
 };

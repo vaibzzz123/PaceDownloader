@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { PUBLIC_BACKEND_URL } from '$env/static/public';
   import AlertTriangleIcon from '@lucide/svelte/icons/alert-triangle';
   import type { PageProps } from './$types';
 
@@ -26,7 +25,7 @@
   );
 
   async function fetchAppState() {
-    const res = await fetch(`${PUBLIC_BACKEND_URL}/app-state`);
+    const res = await fetch('/api/app-state');
     if (!res.ok) throw new Error('Failed to load app state');
     appState = await res.json();
   }
@@ -36,7 +35,7 @@
     saveError = null;
     saved = false;
     try {
-      const res = await fetch(`${PUBLIC_BACKEND_URL}/settings`, {
+      const res = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

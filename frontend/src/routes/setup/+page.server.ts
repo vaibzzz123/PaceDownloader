@@ -1,5 +1,5 @@
 import { error, redirect } from '@sveltejs/kit';
-import { PUBLIC_BACKEND_URL } from '$env/static/public';
+import { getBackendUrl } from '$lib/server/backend';
 
 import type { PageServerLoad } from './$types';
 import type { components } from '$lib/types/api';
@@ -9,8 +9,8 @@ type SettingsResponse = components['schemas']['SettingsResponse'];
 
 export const load: PageServerLoad = async ({ fetch }) => {
   const [settingsRes, appStateRes] = await Promise.all([
-    fetch(`${PUBLIC_BACKEND_URL}/settings`),
-    fetch(`${PUBLIC_BACKEND_URL}/app-state`),
+    fetch(getBackendUrl('/settings')),
+    fetch(getBackendUrl('/app-state')),
   ]);
 
   if (!settingsRes.ok) error(settingsRes.status, 'Failed to load settings');

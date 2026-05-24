@@ -58,9 +58,6 @@ corepack enable pnpm
 # Install dependencies
 pnpm install
 
-# Create a .env file in the root directory of the frontend (for development, see below):
-touch .env
-
 # Run the dev server
 pnpm dev
 # Frontend is now available at http://localhost:5173
@@ -85,10 +82,12 @@ On first run, configure the app via environment variables or the settings UI (in
 
 Settings can also be stored in the SQLite database (`backend/backend.sqlite3`). Environment variables take precedence over database values.
 
-Also create a `.env` file in the root directory of the frontend (for development):
+The frontend does not need a `.env` file for the normal local setup. Browser requests use same-origin paths such as `/api/settings` and `/posters/...`, and SvelteKit proxies them to the FastAPI backend. By default, the frontend server calls the backend at `http://localhost:8000`.
+
+If your local backend runs somewhere else, create `frontend/.env` and set:
 
 ```
-PUBLIC_BACKEND_URL=http://localhost:8000
+BACKEND_INTERNAL_URL=http://localhost:8000
 ```
 
 **Path mapping example** (qBittorrent in Docker):

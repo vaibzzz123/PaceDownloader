@@ -2,7 +2,6 @@
   import { page } from '$app/state';
   import { browser } from '$app/environment';
   import { untrack } from 'svelte';
-  import { PUBLIC_BACKEND_URL } from '$env/static/public';
   import { SvelteSet } from 'svelte/reactivity';
   import SeasonInfo from '$lib/components/SeasonInfo/SeasonInfo.svelte';
   import ColorTable from '$lib/components/ColorTable/ColorTable.svelte';
@@ -39,7 +38,7 @@
   // Only cares about status changes — no progress bars on this page
   $effect(() => {
     if (!browser) return;
-    const source = new EventSource(`${PUBLIC_BACKEND_URL}/events/downloads`);
+    const source = new EventSource('/api/events/downloads');
     source.onmessage = (e) => {
       try {
         const event = JSON.parse(e.data);
@@ -56,7 +55,7 @@
     if (episodeId !== null) loadingIds.add(episodeId);
     error = null;
     try {
-      const res = await fetch(`${PUBLIC_BACKEND_URL}${path}`, { method });
+      const res = await fetch(`/api${path}`, { method });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         error = body.detail ?? 'Request failed';

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { PUBLIC_BACKEND_URL } from '$env/static/public';
   import CheckIcon from '@lucide/svelte/icons/check';
   import SetupWizard from '$lib/components/SetupWizard/SetupWizard.svelte';
 
@@ -60,7 +59,7 @@
     let response: Response;
 
     try {
-      response = await fetch(`${PUBLIC_BACKEND_URL}${path}`, {
+      response = await fetch(`/api${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -97,7 +96,7 @@
   }
 
   async function fetchAppState(): Promise<AppStateResponse> {
-    const response = await fetch(`${PUBLIC_BACKEND_URL}/app-state`);
+    const response = await fetch('/api/app-state');
     const body = await parseResponseBody(response);
 
     if (!response.ok) {
@@ -111,7 +110,7 @@
     let response: Response;
 
     try {
-      response = await fetch(`${PUBLIC_BACKEND_URL}/settings`, {
+      response = await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

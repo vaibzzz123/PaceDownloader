@@ -109,7 +109,7 @@ BACKEND_INTERNAL_URL/settings
 BACKEND_INTERNAL_URL/app-state
 ```
 
-`PUBLIC_BACKEND_URL` should no longer be needed for normal app API calls. It may remain temporarily during migration only if old code still needs it.
+The old browser-public backend URL environment variable should not be used for normal app API calls.
 
 ## SvelteKit Proxy Routes
 
@@ -299,7 +299,8 @@ Manual checks:
 Validation:
 
 ```bash
-rg "QBT_PATH_MAPPING|PUBLIC_BACKEND_URL|healthz" README.md docs frontend
+rg "QBT_PATH_MAPPING|healthz" README.md AGENTS.md CLAUDE.md docs frontend
+rg "PUBLIC_.*BACKEND" README.md AGENTS.md CLAUDE.md docs frontend
 ```
 
 ## End-To-End Acceptance Checklist
@@ -315,4 +316,3 @@ rg "QBT_PATH_MAPPING|PUBLIC_BACKEND_URL|healthz" README.md docs frontend
 - `docker compose restart pace-downloader` applies saved setup.
 - App state survives container recreation because `pace-data` persists.
 - Local non-Docker development still works without setting `BACKEND_INTERNAL_URL`.
-
