@@ -1,15 +1,23 @@
 import { error, redirect, type Handle } from '@sveltejs/kit';
-import { PUBLIC_BACKEND_URL } from '$env/static/public';
 
+import { getBackendUrl } from '$lib/server/backend';
 import type { components } from '$lib/types/api';
 
 type AppStateResponse = components['schemas']['AppStateResponse'];
 
+// Don't need to do redirect stuff as these are API routes
+const UNGUARDED_PATH_PREFIXES = ['/api', '/posters'];
+const UNGUARDED_PATHS = new Set(['/health']);
+
 export const handle: Handle = async ({ event, resolve }) => {
+  if (isUnguardedPath(event.url.pathname)) {
+    return resolve(event);
+  }
+
   let response: Response;
 
   try {
-    response = await event.fetch(`${PUBLIC_BACKEND_URL}/app-state`);
+    response = await event.fetch(getBackendUrl('/app-state'));
   } catch {
     error(503, 'Could not reach Pace Downloader backend');
   }
@@ -26,3 +34,10 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   return resolve(event);
 };
+
+function isUnguardedPath(pathname: string): boolean {
+  return (
+    UNGUARDED_PATHS.has(pathname) ||
+    UNGUARDED_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))
+  );
+}
