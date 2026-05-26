@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 import data_sources
 import metadata
 
@@ -91,6 +93,51 @@ def test_fetch_onepace_releases_writes_parsed_json(monkeypatch, tmp_path: Path):
     assert len(releases) == 2
     assert releases[0]["title"] == "Test Arc 01"
     assert releases[0]["nyaa_id"] == 0
+
+
+def test_fetch_episode_metadata_removes_empty_static_placeholder_before_clone(
+    monkeypatch,
+    tmp_path: Path,
+):
+    metadata_dir = tmp_path / "data" / "eps-metadata"
+    placeholder_dir = metadata_dir / "One Pace"
+    placeholder_dir.mkdir(parents=True)
+    clone_calls = []
+
+    class FakeRepo:
+        @staticmethod
+        def clone_from(url: str, target: Path):
+            clone_calls.append((url, target))
+            assert not placeholder_dir.exists()
+
+    monkeypatch.setattr(data_sources, "METADATA_DIR", metadata_dir)
+    monkeypatch.setattr(data_sources, "Repo", FakeRepo)
+
+    data_sources.fetch_episode_metadata()
+
+    assert clone_calls == [(data_sources.GITHUB_REPO_URL, metadata_dir)]
+
+
+def test_fetch_episode_metadata_refuses_non_git_directory_with_existing_files(
+    monkeypatch,
+    tmp_path: Path,
+):
+    metadata_dir = tmp_path / "data" / "eps-metadata"
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / "unexpected.txt").write_text("keep me")
+
+    class FakeRepo:
+        @staticmethod
+        def clone_from(url: str, target: Path):
+            raise AssertionError("clone should not run")
+
+    monkeypatch.setattr(data_sources, "METADATA_DIR", metadata_dir)
+    monkeypatch.setattr(data_sources, "Repo", FakeRepo)
+
+    with pytest.raises(RuntimeError, match="Cannot clone episode metadata"):
+        data_sources.fetch_episode_metadata()
+
+    assert (metadata_dir / "unexpected.txt").read_text() == "keep me"
 
 
 def test_refresh_data_fetches_releases_when_stale(monkeypatch):

@@ -169,3 +169,7 @@ venv/
 
 # VSCode workspace file
 *.code-workspace
+
+# Docker compose files
+compose.yml
+compose.yaml

@@ -1,7 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.responses import StreamingResponse, JSONResponse
 from models import (
     SeasonResponse,
@@ -49,6 +49,27 @@ _STATUS_MAP = {
 }
 
 
+def _metadata_unavailable(exc: RuntimeError) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=f"Episode metadata is unavailable: {exc}",
+    )
+
+
+def _get_seasons_or_503() -> list[dict]:
+    try:
+        return get_seasons()
+    except RuntimeError as exc:
+        raise _metadata_unavailable(exc) from exc
+
+
+def _get_episodes_or_503() -> list[dict]:
+    try:
+        return get_episodes()
+    except RuntimeError as exc:
+        raise _metadata_unavailable(exc) from exc
+
+
 def construct_settings_response_with_masked_password(settings: dict) -> SettingsResponse:
     response_settings = {
         key: dict(value)
@@ -91,18 +112,18 @@ def get_app_state_route():
 
 @router.get("/season", response_model=list[SeasonResponse])
 def get_seasons_route():
-    return [SeasonResponse(**s) for s in get_seasons()]
+    return [SeasonResponse(**s) for s in _get_seasons_or_503()]
 
 @router.get("/season/{season_num}", response_model=SeasonResponse)
 def get_season(season_num: int):
-    match = next((s for s in get_seasons() if s["num"] == season_num), None)
+    match = next((s for s in _get_seasons_or_503() if s["num"] == season_num), None)
     if match is None:
         raise HTTPException(status_code=404, detail=f"Season {season_num} not found")
     return SeasonResponse(**match)
 
 @router.get("/season/{season_num}/episodes", response_model=list[EpisodeResponse])
 def get_season_episodes(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
-    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    season_episodes = [ep for ep in _get_episodes_or_503() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
 
@@ -122,7 +143,7 @@ def get_season_episodes(season_num: int, dm: DownloadManager = Depends(get_downl
 
 @router.get("/episode", response_model=list[EpisodeDownloadResponse])
 def list_episode_downloads_route(dm: DownloadManager = Depends(get_download_manager)):
-    metadata_map = {ep["id"]: ep for ep in get_episodes()}
+    metadata_map = {ep["id"]: ep for ep in _get_episodes_or_503()}
     return [
         EpisodeDownloadResponse(
             ep_id=dl["ep_id"],

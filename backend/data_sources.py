@@ -114,6 +114,36 @@ def parse_onepace_releases_rss(xml_text: str) -> list[dict]:
     return releases
 
 
+def _metadata_dir_contains_only_empty_static_placeholder() -> bool:
+    """Return whether only the poster StaticFiles placeholder exists."""
+    if not METADATA_DIR.exists() or (METADATA_DIR / ".git").exists():
+        return False
+
+    entries = list(METADATA_DIR.iterdir())
+    placeholder_dir = METADATA_DIR / "One Pace"
+    return (
+        len(entries) == 1
+        and entries[0] == placeholder_dir
+        and placeholder_dir.is_dir()
+        and not any(placeholder_dir.iterdir())
+    )
+
+
+def _prepare_metadata_clone_target() -> None:
+    if not METADATA_DIR.exists() or (METADATA_DIR / ".git").exists():
+        return
+
+    if _metadata_dir_contains_only_empty_static_placeholder():
+        logger.info("Removing empty metadata placeholder before initial clone")
+        (METADATA_DIR / "One Pace").rmdir()
+        return
+
+    if any(METADATA_DIR.iterdir()):
+        raise RuntimeError(
+            f"Cannot clone episode metadata into non-git directory with existing files: {METADATA_DIR}"
+        )
+
+
 def fetch_episode_metadata():
     """Clone or pull the One Pace Jellyfin metadata repository."""
     if (METADATA_DIR / ".git").exists():
@@ -123,6 +153,7 @@ def fetch_episode_metadata():
         logger.debug("Git pull completed for %s", METADATA_DIR)
     else:
         logger.info("Cloning One Pace Jellyfin metadata repository")
+        _prepare_metadata_clone_target()
         Repo.clone_from(GITHUB_REPO_URL, METADATA_DIR)
         logger.debug("Git clone completed to %s", METADATA_DIR)
 

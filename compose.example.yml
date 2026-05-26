@@ -1,0 +1,25 @@
+services:
+  pace-downloader:
+    build: .
+    container_name: pace-downloader
+    ports:
+      - "${PACE_PORT:-3000}:3000"
+    environment:
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      # Uncomment and adjust these after mounting matching host paths below.
+      # MEDIA_DATA_LOCATION: /media
+      # QBT_HOSTNAME: http://host.docker.internal:8080
+      # QBT_PATH_LOCAL: /downloads
+      # QBT_PATH_REMOTE: /downloads
+      # PREFER_EXTENDED: "true"
+    volumes:
+      - pace-data:/var/lib/pace-downloader
+      # Example Jellyfin-ready media output mount:
+      # - /path/on/host/media:/media
+      # Example qBittorrent download mount for path mapping:
+      # - /path/on/host/downloads:/downloads
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pace-data:

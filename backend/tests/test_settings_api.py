@@ -1,6 +1,8 @@
 import asyncio
 from unittest.mock import patch
 
+import pytest
+
 from models import SettingsSaveRequest, SetupQbittorrentValidationRequest
 
 
@@ -78,6 +80,19 @@ def test_get_app_state_route_returns_lifecycle_flags(mock_db):
 
     assert result.initial_setup_complete is False
     assert result.restart_required is True
+
+
+@patch("api.get_seasons")
+def test_get_seasons_route_returns_503_when_metadata_is_unavailable(mock_get_seasons):
+    from api import get_seasons_route
+
+    mock_get_seasons.side_effect = RuntimeError("Metadata not initialized")
+
+    with pytest.raises(Exception) as exc_info:
+        get_seasons_route()
+
+    assert exc_info.value.status_code == 503
+    assert "Episode metadata is unavailable" in exc_info.value.detail
 
 
 @patch("api.validate_qbittorrent_connection")

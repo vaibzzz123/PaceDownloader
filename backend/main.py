@@ -37,16 +37,21 @@ download_manager: DownloadManager | None = None
 if not initial_setup_complete:
     logger.warning("Initial setup is required; skipping qBittorrent client, download manager, polling, and startup scan")
 else:
-    logger.info("Initial setup is complete; initializing qBittorrent client and download manager")
+    logger.info("Initial setup is complete; initializing episode metadata")
     try:
         media_location_value = app_settings.get_setting_value("media_data_location")
         media_location = Path(media_location_value) if media_location_value else None
         refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
-        qbt_client = QbittorrentClient()
-        download_manager = DownloadManager(qbt_client)
-        set_download_manager(download_manager)
     except Exception as e:
-        logger.warning("Download services are unavailable; setup and settings routes remain available: %s", e)
+        logger.warning("Episode metadata is unavailable; browse routes will return 503: %s", e)
+    else:
+        logger.info("Episode metadata is ready; initializing qBittorrent client and download manager")
+        try:
+            qbt_client = QbittorrentClient()
+            download_manager = DownloadManager(qbt_client)
+            set_download_manager(download_manager)
+        except Exception as e:
+            logger.warning("Download services are unavailable; setup and settings routes remain available: %s", e)
 
 
 async def _startup_scan():
