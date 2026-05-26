@@ -38,7 +38,7 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates git libstdc++6 \
+    && apt-get install -y --no-install-recommends ca-certificates git gosu libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node:24-bookworm-slim /usr/local/bin/node /usr/local/bin/node
@@ -47,10 +47,15 @@ COPY --from=python-deps /opt/venv /opt/venv
 WORKDIR /app
 
 COPY backend/ /app/backend/
+COPY docker/entrypoint.sh /app/docker/entrypoint.sh
 COPY docker/start.py /app/docker/start.py
 COPY --from=frontend-build /app/frontend/build /app/frontend/build
+
+RUN mkdir -p /var/lib/pace-downloader /home/pace \
+    && chmod +x /app/docker/entrypoint.sh
 
 EXPOSE 3000
 VOLUME ["/var/lib/pace-downloader"]
 
+ENTRYPOINT ["/app/docker/entrypoint.sh"]
 CMD ["python", "/app/docker/start.py"]

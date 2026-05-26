@@ -5,6 +5,8 @@ services:
     ports:
       - "${PACE_HOST:-127.0.0.1}:${PACE_PORT:-3000}:3000"
     environment:
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       # Uncomment and adjust these after mounting matching host paths below.
       # MEDIA_DATA_LOCATION: /media

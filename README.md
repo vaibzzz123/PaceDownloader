@@ -66,6 +66,18 @@ The container stores runtime data in the `pace-data` named volume at `/var/lib/p
 - `data/`
 - `logs/`
 
+The container starts as root only long enough to prepare runtime ownership, then
+runs the app as `PUID:PGID`. Both default to `1000:1000`, which matches the
+first normal user on many Linux hosts:
+
+```env
+PUID=1000
+PGID=1000
+```
+
+Set these values in your shell, repo-root `.env`, or local `compose.yml` if your
+media/download paths are owned by a different host user or group.
+
 The public container health endpoint is:
 
 ```text
@@ -96,6 +108,19 @@ MEDIA_DATA_LOCATION=/media
 QBT_PATH_LOCAL=/downloads
 QBT_PATH_REMOTE=/downloads
 ```
+
+The configured `PUID:PGID` must be able to write to the media mount and read
+from the downloads mount. If you use the defaults, that usually means the host
+directories should be accessible to UID/GID `1000:1000`. For example:
+
+```bash
+sudo chown -R 1000:1000 /path/on/host/media
+sudo chown -R 1000:1000 /path/on/host/downloads
+```
+
+Hardlinking also requires the source and destination to be on the same
+filesystem and allowed by permissions. If hardlinking fails, Pace Downloader
+falls back to copying the file.
 
 `QBT_PATH_REMOTE` is the path prefix qBittorrent reports for downloaded files. `QBT_PATH_LOCAL` is the matching path prefix visible to Pace Downloader inside its container. Set both values together, or leave both empty if qBittorrent returns paths the app can already read.
 
