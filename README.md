@@ -44,11 +44,18 @@ Then open:
 http://localhost:3000
 ```
 
-Set `PACE_PORT` if you want a different host port:
+By default, Compose binds the app to `127.0.0.1`, so it is only reachable from
+the machine running Docker. Set `PACE_PORT` if you want a different host port:
 
 ```bash
 PACE_PORT=3030 docker compose up --build
 ```
+
+Do not expose Pace Downloader directly to the internet. It can control
+qBittorrent, write to your configured media directories, and show local
+configuration details. For remote access, put it behind a trusted VPN, reverse
+proxy, or authentication layer. If you intentionally need it to listen on other
+network interfaces, set `PACE_HOST` in your local environment or `compose.yml`.
 
 The container stores runtime data in the `pace-data` named volume at `/var/lib/pace-downloader`, including:
 

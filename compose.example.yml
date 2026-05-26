@@ -3,7 +3,7 @@ services:
     build: .
     container_name: pace-downloader
     ports:
-      - "${PACE_PORT:-3000}:3000"
+      - "${PACE_HOST:-127.0.0.1}:${PACE_PORT:-3000}:3000"
     environment:
       LOG_LEVEL: "${LOG_LEVEL:-INFO}"
       # Uncomment and adjust these after mounting matching host paths below.
