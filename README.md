@@ -56,6 +56,9 @@ qBittorrent, write to your configured media directories, and show local
 configuration details. For remote access, put it behind a trusted VPN, reverse
 proxy, or authentication layer. If you intentionally need it to listen on other
 network interfaces, set `PACE_HOST` in your local environment or `compose.yml`.
+The settings and setup endpoints intentionally handle local system information,
+including qBittorrent connection details and media/download path configuration,
+so treat the app as private infrastructure.
 
 The container stores runtime data in the `pace-data` named volume at `/var/lib/pace-downloader`, including:
 
@@ -199,6 +202,9 @@ On first run, configure the app via environment variables or the settings UI (in
 | `LOG_LEVEL` | Logging verbosity (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` |
 
 Settings can also be stored in the SQLite database (`backend/backend.sqlite3`). Environment variables take precedence over database values.
+API responses mask the qBittorrent password, but settings and setup validation
+responses can still reveal local hostnames, usernames, and filesystem layout.
+Keep the app on a trusted local network or behind access control.
 
 The frontend does not need a `.env` file for the normal local setup. Browser requests use same-origin paths such as `/api/settings` and `/posters/...`, and SvelteKit proxies them to the FastAPI backend. By default, the frontend server calls the backend at `http://localhost:8000`.
 

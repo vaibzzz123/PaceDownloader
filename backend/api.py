@@ -90,7 +90,8 @@ async def health():
             con.execute("SELECT 1")
         checks["database"] = "ok"
     except Exception as e:
-        checks["database"] = f"error: {e}"
+        logger.warning("Health check database probe failed: %s", e)
+        checks["database"] = "error"
     
     # Check qBittorrent (non-fatal if down)
     try:
@@ -98,7 +99,8 @@ async def health():
         dm.qbt_client._client.app_version()
         checks["qbittorrent"] = "ok"
     except Exception as e:
-        checks["qbittorrent"] = f"error: {e}"
+        logger.info("Health check qBittorrent probe failed: %s", e)
+        checks["qbittorrent"] = "error"
     
     status = "ok" if all(v == "ok" for v in checks.values()) else "degraded"
     code = 200 if status == "ok" else 503

@@ -88,6 +88,7 @@ def test_validate_media_location_accepts_writable_directory(tmp_path):
     result = validate_media_location(str(tmp_path))
 
     assert result.ok is True
+    assert result.details["path"] == str(tmp_path)
     assert result.details["exists"] is True
     assert result.details["is_dir"] is True
     assert result.details["writable"] is True
@@ -132,6 +133,8 @@ def test_validate_path_mapping_accepts_existing_local_directory(tmp_path):
     assert result.message == "qBittorrent path mapping is valid"
     assert result.details["local_path"] == str(tmp_path)
     assert result.details["remote_path"] == "/downloads"
+    assert result.details["local_exists"] is True
+    assert result.details["local_is_dir"] is True
 
 
 def test_validate_path_mapping_rejects_one_sided_mapping(tmp_path):

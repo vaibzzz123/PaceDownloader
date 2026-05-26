@@ -2,6 +2,7 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
+from fastapi import HTTPException
 
 from models import SettingsSaveRequest, SetupQbittorrentValidationRequest
 
@@ -80,6 +81,26 @@ def test_get_app_state_route_returns_lifecycle_flags(mock_db):
 
     assert result.initial_setup_complete is False
     assert result.restart_required is True
+
+
+@patch("api.get_download_manager")
+@patch("api.db")
+def test_health_route_does_not_return_raw_exception_details(mock_db, mock_get_download_manager):
+    from api import health
+
+    mock_db.get_db.side_effect = RuntimeError("sqlite path /private/backend.sqlite3")
+    mock_get_download_manager.side_effect = HTTPException(
+        status_code=503,
+        detail="qBittorrent http://user:pass@localhost:8080 unavailable",
+    )
+
+    result = asyncio.run(health())
+
+    assert result.status_code == 503
+    assert b"/private/backend.sqlite3" not in result.body
+    assert b"user:pass" not in result.body
+    assert b'"database":"error"' in result.body
+    assert b'"qbittorrent":"error"' in result.body
 
 
 @patch("api.get_seasons")
