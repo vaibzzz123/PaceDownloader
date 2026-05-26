@@ -142,7 +142,7 @@ Add a public frontend health endpoint:
 frontend/src/routes/health/+server.ts
 ```
 
-It should return `200` when SvelteKit can reach FastAPI and a non-`200` response when the internal backend is unavailable. Use `/health`, not `/healthz`.
+It should return `200` when SvelteKit can reach FastAPI and a non-`200` response when the internal backend is unavailable. Use `/health`, not a z-suffixed health endpoint.
 
 `frontend/src/hooks.server.ts` must not redirect or block `/api`, `/posters`, or `/health`.
 
@@ -152,7 +152,7 @@ Add:
 
 - `Dockerfile`
 - `.dockerignore`
-- `compose.yaml`
+- `compose.example.yml` as the tracked template for a local ignored `compose.yml`
 - `docker/start.py`
 
 The Docker image should build the frontend with `pnpm build`, install backend Python dependencies from `backend/requirements.txt`, and run both services in the final image.
@@ -267,7 +267,7 @@ docker build -t pace-downloader .
 
 ### Slice 4: Compose And Persistent Storage
 
-- Add `compose.yaml`.
+- Add `compose.example.yml` as the tracked template for a local ignored `compose.yml`.
 - Publish only port `3000`.
 - Add `pace-data` named volume.
 - Add example media/download bind mounts as commented guidance.
@@ -294,13 +294,14 @@ Manual checks:
   - qBittorrent on another machine via LAN IP/DNS
   - qBittorrent in another Docker stack via an attached network or reachable hostname
 - Document media and download bind mount expectations.
-- Replace old `QBT_PATH_MAPPING` wording with `QBT_PATH_LOCAL` and `QBT_PATH_REMOTE`.
+- Replace old combined path-mapping wording with separate local and remote path variables.
 
 Validation:
 
 ```bash
-rg "QBT_PATH_MAPPING|healthz" README.md AGENTS.md CLAUDE.md docs frontend
-rg "PUBLIC_.*BACKEND" README.md AGENTS.md CLAUDE.md docs frontend
+rg "health[z]" README.md AGENTS.md CLAUDE.md docs frontend
+rg "QBT_PATH_" README.md AGENTS.md CLAUDE.md docs frontend
+rg "PUBL[I]C_.*BACKEND" README.md AGENTS.md CLAUDE.md docs frontend
 ```
 
 ## End-To-End Acceptance Checklist

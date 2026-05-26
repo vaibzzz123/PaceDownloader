@@ -207,7 +207,8 @@ The backend generates an OpenAPI spec at `/openapi.json` which the frontend uses
 
 Settings stored in SQLite but overridable via environment variables (uppercase field names):
 - `QBT_HOSTNAME`, `QBT_USERNAME`, `QBT_PASSWORD` - qBittorrent connection
-- `QBT_PATH_MAPPING` - Path translation between qBittorrent and local filesystem (format: `local_path:remote_path`)
+- `QBT_PATH_LOCAL` - Path prefix visible to Pace Downloader for downloaded files
+- `QBT_PATH_REMOTE` - Path prefix reported by qBittorrent for downloaded files
 - `MEDIA_DATA_LOCATION` - Where to place downloaded episodes
 - `PREFER_EXTENDED` - Prefer extended episode versions when available
 - `QBT_POLLING_RATE` - Download status polling interval in seconds

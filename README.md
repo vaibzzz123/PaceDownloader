@@ -20,14 +20,124 @@ One Pace releases episodes as torrents on Nyaa.si. This app provides a web UI to
 ## Prerequisites
 
 - **qBittorrent** with Web UI enabled (accessible from the machine running this app)
-- **Python 3.14+** for the backend
-- **Node.js 24+** for the frontend
-- **pnpm 10+** for frontend dependencies (Corepack recommended)
+- **Docker** with the Docker Compose plugin for the containerized setup
+- **Python 3.14+** for local backend development
+- **Node.js 24+** for local frontend development
+- **pnpm 10+** for local frontend dependencies (Corepack recommended)
 - A running **Jellyfin** instance with a configured media library
 
 ## Setup
 
-### 1. Backend
+### Option A: Docker Quickstart
+
+The Docker setup builds one app image that runs both the SvelteKit frontend and the FastAPI backend. Only the frontend port is published to the host; browser calls to `/api/...` and `/posters/...` are proxied internally to FastAPI.
+
+```bash
+cp compose.example.yml compose.yml
+# Edit compose.yml for your media/download mounts and any environment overrides.
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://localhost:3000
+```
+
+Set `PACE_PORT` if you want a different host port:
+
+```bash
+PACE_PORT=3030 docker compose up --build
+```
+
+The container stores runtime data in the `pace-data` named volume at `/var/lib/pace-downloader`, including:
+
+- `backend.sqlite3`
+- `data/`
+- `logs/`
+
+The public container health endpoint is:
+
+```text
+http://localhost:3000/health
+```
+
+Port `8000` is intentionally not published by the Compose file.
+
+For Docker, pass configuration through your shell, a repo-root `.env` file next to `compose.yml`, or the local `compose.yml` itself. Do not commit credentials or local media paths.
+
+#### Docker Media And Download Mounts
+
+The app needs to see the Jellyfin-ready output path and, when qBittorrent downloads outside the app container, the downloaded files. Add bind mounts to `compose.yml` that match the paths you save in settings or pass through environment variables.
+
+Common container paths:
+
+```yaml
+volumes:
+  - pace-data:/var/lib/pace-downloader
+  - /path/on/host/media:/media
+  - /path/on/host/downloads:/downloads
+```
+
+Then configure:
+
+```env
+MEDIA_DATA_LOCATION=/media
+QBT_PATH_LOCAL=/downloads
+QBT_PATH_REMOTE=/downloads
+```
+
+`QBT_PATH_REMOTE` is the path prefix qBittorrent reports for downloaded files. `QBT_PATH_LOCAL` is the matching path prefix visible to Pace Downloader inside its container. Set both values together, or leave both empty if qBittorrent returns paths the app can already read.
+
+For example, if qBittorrent reports `/data/torrents/episode.mkv` but the Pace Downloader container can read the same file as `/downloads/episode.mkv`, use:
+
+```env
+QBT_PATH_REMOTE=/data/torrents
+QBT_PATH_LOCAL=/downloads
+```
+
+#### qBittorrent From Docker
+
+If qBittorrent runs directly on the Linux Docker host, use the Compose-provided host gateway name. The provided `compose.example.yml` includes the needed `extra_hosts` entry; keep it in your local `compose.yml` when using this address.
+
+```env
+QBT_HOSTNAME=http://host.docker.internal:8080
+```
+
+If qBittorrent runs on another machine, use its LAN IP address or DNS name:
+
+```env
+QBT_HOSTNAME=http://192.168.1.50:8080
+```
+
+If qBittorrent runs in another Docker stack, connect both stacks to a shared Docker network or use any hostname reachable from the Pace Downloader container. For a shared external network, attach the service in `compose.yml`:
+
+```yaml
+services:
+  pace-downloader:
+    networks:
+      - media
+
+networks:
+  media:
+    external: true
+```
+
+Then use the qBittorrent service or container DNS name:
+
+```env
+QBT_HOSTNAME=http://qbittorrent:8080
+```
+
+After saving initial setup through the UI, restart the container so startup-only services are recreated with the saved settings:
+
+```bash
+docker compose restart pace-downloader
+```
+
+### Option B: Local Development
+
+#### 1. Backend
 
 ```bash
 cd backend
@@ -39,15 +149,15 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Create a .env file in the root directory of the backend (for development, see below):
-touch backend/.env
+# Create a .env file in the backend directory (for development, see below):
+touch .env
 
 # Run the development server
 fastapi dev main.py
 # Backend is now available at http://localhost:8000
 ```
 
-### 2. Frontend
+#### 2. Frontend
 
 ```bash
 cd frontend
@@ -63,9 +173,9 @@ pnpm dev
 # Frontend is now available at http://localhost:5173
 ```
 
-### 3. Configuration
+### Configuration
 
-On first run, configure the app via environment variables or the settings UI (in progress). Place the environment variables in a `.env` file in the root directory of the backend:
+On first run, configure the app via environment variables or the settings UI (in progress). For local backend development, place environment variables in `backend/.env`:
 
 | Variable | Description | Default |
 |---|---|---|
@@ -73,7 +183,8 @@ On first run, configure the app via environment variables or the settings UI (in
 | `QBT_USERNAME` | qBittorrent username | |
 | `QBT_PASSWORD` | qBittorrent password | |
 | `MEDIA_DATA_LOCATION` | Path where downloaded episodes will be placed for Jellyfin | |
-| `QBT_PATH_MAPPING` | Path translation for Docker/NFS setups (`local_path:remote_path`) | |
+| `QBT_PATH_LOCAL` | Path prefix visible to Pace Downloader for downloaded files | |
+| `QBT_PATH_REMOTE` | Path prefix reported by qBittorrent for downloaded files | |
 | `QBT_CATEGORY` | qBittorrent category to assign to torrents | |
 | `QBT_DOWNLOAD_LOCATION` | Custom download directory in qBittorrent | |
 | `PREFER_EXTENDED` | Prefer extended episode versions (`true`/`false`) | `true` |
@@ -90,11 +201,14 @@ If your local backend runs somewhere else, create `frontend/.env` and set:
 BACKEND_INTERNAL_URL=http://localhost:8000
 ```
 
-**Path mapping example** (qBittorrent in Docker):
+**Path mapping example** (qBittorrent reports a different path than Pace Downloader can read):
+
 ```
-QBT_PATH_MAPPING=/mnt/media:/downloads
+QBT_PATH_REMOTE=/downloads
+QBT_PATH_LOCAL=/mnt/media
 ```
-This translates `/downloads/file.mkv` (qBittorrent's view) to `/mnt/media/file.mkv` (local filesystem view/view from this app's container once implemented).
+
+This translates `/downloads/file.mkv` from qBittorrent into `/mnt/media/file.mkv` for the backend.
 
 ## Architecture
 
