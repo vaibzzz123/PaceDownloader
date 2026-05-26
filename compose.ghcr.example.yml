@@ -1,6 +1,6 @@
 services:
   pace-downloader:
-    image: ghcr.io/vaibzzz123/pacedownloader:latest
+    image: ghcr.io/vaibzzz123/pacedownloader:main
     container_name: pace-downloader
     ports:
       - "${PACE_HOST:-127.0.0.1}:${PACE_PORT:-3000}:3000"

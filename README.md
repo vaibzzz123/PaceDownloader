@@ -44,8 +44,10 @@ docker compose up -d
 The published image is:
 
 ```text
-ghcr.io/vaibzzz123/pacedownloader:latest
+ghcr.io/vaibzzz123/pacedownloader:main
 ```
+
+Versioned releases also publish semver tags such as `v0.1.0` and `latest`.
 
 To build the image locally instead:
 
