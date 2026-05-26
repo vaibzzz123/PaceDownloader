@@ -30,7 +30,24 @@ One Pace releases episodes as torrents on Nyaa.si. This app provides a web UI to
 
 ### Option A: Docker Quickstart
 
-The Docker setup builds one app image that runs both the SvelteKit frontend and the FastAPI backend. Only the frontend port is published to the host; browser calls to `/api/...` and `/posters/...` are proxied internally to FastAPI.
+The Docker setup runs one app image that includes both the SvelteKit frontend and the FastAPI backend. Only the frontend port is published to the host; browser calls to `/api/...` and `/posters/...` are proxied internally to FastAPI.
+
+For the published GHCR image:
+
+```bash
+cp compose.ghcr.example.yml compose.yml
+# Edit compose.yml for your media/download mounts and any environment overrides.
+docker compose pull
+docker compose up -d
+```
+
+The published image is:
+
+```text
+ghcr.io/vaibzzz123/pacedownloader:latest
+```
+
+To build the image locally instead:
 
 ```bash
 cp compose.example.yml compose.yml
@@ -48,7 +65,7 @@ By default, Compose binds the app to `127.0.0.1`, so it is only reachable from
 the machine running Docker. Set `PACE_PORT` if you want a different host port:
 
 ```bash
-PACE_PORT=3030 docker compose up --build
+PACE_PORT=3030 docker compose up -d
 ```
 
 Do not expose Pace Downloader directly to the internet. It can control
