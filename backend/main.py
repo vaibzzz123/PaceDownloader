@@ -81,4 +81,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(api_router)
-app.mount("/posters", StaticFiles(directory="data/eps-metadata/One Pace"), name="posters")
+
+posters_dir = Path("data/eps-metadata/One Pace")
+posters_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/posters", StaticFiles(directory=posters_dir), name="posters")
