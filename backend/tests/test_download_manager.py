@@ -126,3 +126,93 @@ def test_download_episode_uses_release_resolver_crc32_and_magnet(monkeypatch, tm
     assert episode_download["file_path_torrent"] == "/downloads/Fixture Release [DEADBEEF].mkv"
     assert episode_download["file_path_disk"] == "/media/Season 1/Fixture Release [DEADBEEF].mkv"
     assert episode_download["status"] == "downloading"
+
+
+def test_add_episode_to_data_location_syncs_media_metadata(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
+    db.initialize_db()
+
+    media_root = tmp_path / "media"
+    src = tmp_path / "downloads" / "Fixture Release [DEADBEEF].mkv"
+    dest = media_root / "Season 1" / "Fixture Release [DEADBEEF].mkv"
+    src.parent.mkdir(parents=True)
+    src.write_text("video")
+
+    infohash = "b" * 40
+    db.create_torrent_download(infohash, name="Verified Release", status="downloading")
+    download_id = db.create_episode_download(
+        ep_id="101",
+        crc32="DEADBEEF",
+        torrent_infohash=infohash,
+        file_path_torrent=str(src),
+        file_path_disk=str(dest),
+        status="downloading",
+    )
+
+    episodes = [
+        {
+            "id": 101,
+            "season": 1,
+            "ep_number": 1,
+            "ep_name": "One Pace - S01E01 - Fixture Episode",
+            "file_location_media": str(dest),
+        }
+    ]
+    sync_calls = []
+
+    monkeypatch.setattr(download_manager.app_settings, "get_setting_value", lambda field: str(media_root))
+    monkeypatch.setattr(download_manager, "get_episodes", lambda: episodes)
+    monkeypatch.setattr(
+        download_manager,
+        "sync_media_metadata",
+        lambda media_location, episodes: sync_calls.append((media_location, episodes))
+        or {
+            "copied_files": 1,
+            "skipped_files": 0,
+            "removed_files": 0,
+            "removed_directories": 0,
+        },
+    )
+
+    manager = DownloadManager(qbt_client=None)
+
+    assert manager._add_episode_to_data_location(101) == "hardlink"
+    assert dest.exists()
+    assert db.get_episode_download(download_id)["status"] == "hardlink"
+    assert sync_calls == [(media_root, episodes)]
+
+
+def test_metadata_sync_failure_does_not_fail_episode_placement(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
+    db.initialize_db()
+
+    media_root = tmp_path / "media"
+    src = tmp_path / "downloads" / "Fixture Release [DEADBEEF].mkv"
+    dest = media_root / "Season 1" / "Fixture Release [DEADBEEF].mkv"
+    src.parent.mkdir(parents=True)
+    src.write_text("video")
+
+    infohash = "c" * 40
+    db.create_torrent_download(infohash, name="Verified Release", status="downloading")
+    db.create_episode_download(
+        ep_id="101",
+        crc32="DEADBEEF",
+        torrent_infohash=infohash,
+        file_path_torrent=str(src),
+        file_path_disk=str(dest),
+        status="downloading",
+    )
+
+    monkeypatch.setattr(download_manager.app_settings, "get_setting_value", lambda field: str(media_root))
+    monkeypatch.setattr(download_manager, "get_episodes", lambda: [])
+    monkeypatch.setattr(
+        download_manager,
+        "sync_media_metadata",
+        lambda media_location, episodes: (_ for _ in ()).throw(RuntimeError("metadata unavailable")),
+    )
+
+    manager = DownloadManager(qbt_client=None)
+
+    assert manager._add_episode_to_data_location(101) == "hardlink"
+    assert dest.exists()
+    assert db.get_episode_download_by_ep_id(101)["status"] == "hardlink"

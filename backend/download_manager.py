@@ -1,10 +1,11 @@
 import asyncio
 import os
 import shutil
+from pathlib import Path
 
 from qbittorrent import QbittorrentClient
 from qbittorrentapi import TorrentState
-from metadata import get_episodes
+from metadata import get_episodes, sync_media_metadata
 from release_resolver import resolve_episode_release
 from logging_config import get_logger
 from events import downloads_broadcaster
@@ -38,6 +39,25 @@ class DownloadManager:
                 logger.warning("Failed to remove torrent %s from qBittorrent: %s", torrent["infohash"], e)
         db.clear_all_downloads()
         logger.info("Reset complete: all downloads cleared")
+
+
+    def _sync_media_metadata_after_disk_change(self):
+        media_location_value = app_settings.get_setting_value("media_data_location")
+        if not media_location_value:
+            logger.debug("Skipping media metadata sync after disk change because media_data_location is not configured")
+            return
+
+        try:
+            summary = sync_media_metadata(Path(media_location_value), episodes=get_episodes())
+            logger.info(
+                "Media metadata synced after disk change: copied=%d skipped=%d removed=%d removed_dirs=%d",
+                summary["copied_files"],
+                summary["skipped_files"],
+                summary["removed_files"],
+                summary["removed_directories"],
+            )
+        except Exception as e:
+            logger.warning("Failed to sync media metadata after disk change: %s", e)
 
 
     def download_episode(self, episode_id: int, prefer_extended: bool = True):
@@ -143,6 +163,7 @@ class DownloadManager:
 
         # Remove the episode download DB record
         db.delete_episode_download(episode_download["id"])
+        self._sync_media_metadata_after_disk_change()
 
         if infohash is None:
             logger.info("Removed imported episode download for episode ID %d", episode_id)
@@ -197,6 +218,7 @@ class DownloadManager:
                 logger.info("Removed disk file for episode %s: %s", ep["ep_id"], file_path_disk)
         db.delete_episode_downloads_by_torrent(infohash)
         db.delete_torrent_download(infohash)
+        self._sync_media_metadata_after_disk_change()
         logger.info("Removed torrent %s", infohash)
 
     def get_episode_info(self, episode_id: int) -> dict | None:
@@ -623,6 +645,7 @@ class DownloadManager:
             status = "copy"
 
         db.update_episode_download_status(episode_download["id"], status)
+        self._sync_media_metadata_after_disk_change()
 
         infohash = episode_download["torrent_infohash"]
         remaining = db.get_episode_downloads_by_torrent(infohash)
