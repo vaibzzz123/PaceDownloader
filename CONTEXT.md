@@ -24,6 +24,18 @@ _Avoid_: db setting, saved value
 The path visible to Pace Downloader where organized One Pace episode files are placed.
 _Avoid_: Jellyfin library path, Jellyfin media path
 
+**Constructed Metadata**:
+The episode and season information Pace Downloader builds from One Pace source metadata for browsing, downloads, and media placement.
+_Avoid_: metadata cache, metadata mapping
+
+**Managed Metadata Files**:
+The Jellyfin-readable image and NFO files Pace Downloader owns under the **Media Data Location**.
+_Avoid_: source metadata, constructed metadata
+
+**Media Metadata Synchronization**:
+The process that makes **Managed Metadata Files** under the **Media Data Location** match the One Pace episodes currently present on disk.
+_Avoid_: metadata construction, metadata refresh
+
 **qBittorrent Remote Path**:
 The download path prefix reported by qBittorrent from qBittorrent's filesystem perspective.
 _Avoid_: app download path
@@ -44,6 +56,8 @@ _Avoid_: media mapping, Jellyfin mapping
 - A changed **Restart-Applied Setting** creates **Restart Required**.
 - **Effective Setting** values decide whether **Initial Setup** has enough configuration; environment variables count.
 - **Media Data Location** is owned from Pace Downloader's filesystem perspective; Jellyfin may mount the same data at a different path.
+- **Constructed Metadata** is built before Pace Downloader can reliably browse episodes, resolve downloads, or perform **Media Metadata Synchronization**.
+- **Media Metadata Synchronization** writes and removes only **Managed Metadata Files** under the **Media Data Location**.
 - **qBittorrent Path Mapping** is required only when qBittorrent reports paths that Pace Downloader cannot use directly.
 - **qBittorrent Path Mapping** translates paths from **qBittorrent Remote Path** to **qBittorrent Local Path**.
 
@@ -57,6 +71,8 @@ _Avoid_: media mapping, Jellyfin mapping
 > **Domain expert:** "No — qBittorrent connection settings are **Restart-Applied Settings**."
 > **Dev:** "Should the user enter Jellyfin's library path for **Media Data Location**?"
 > **Domain expert:** "No — Pace Downloader needs the path it can write to."
+> **Dev:** "Is **Media Metadata Synchronization** the same thing as building **Constructed Metadata**?"
+> **Domain expert:** "No — **Constructed Metadata** is the app's episode and season view; **Media Metadata Synchronization** changes Jellyfin-readable files on disk."
 > **Dev:** "When does **qBittorrent Path Mapping** matter?"
 > **Domain expert:** "Only when qBittorrent reports `/downloads/file.mkv` but Pace Downloader must read that file at `/data/torrents/downloads/file.mkv`."
 
@@ -65,4 +81,5 @@ _Avoid_: media mapping, Jellyfin mapping
 - "setup wizard" refers to the frontend UI component; **Initial Setup** refers to the domain flow.
 - "core important stuff" was resolved to **Restart-Applied Setting**.
 - "media location" was resolved to **Media Data Location**, the path visible to Pace Downloader, not Jellyfin.
+- "metadata" can mean **Constructed Metadata**, **Managed Metadata Files**, or **Media Metadata Synchronization**; prefer the precise term when discussing responsibilities.
 - "path mapping" was resolved to **qBittorrent Path Mapping**, translating qBittorrent-reported paths into Pace Downloader-visible paths.

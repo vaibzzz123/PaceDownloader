@@ -5,7 +5,7 @@ from pathlib import Path
 
 from qbittorrent import QbittorrentClient
 from qbittorrentapi import TorrentState
-from metadata import get_episodes, sync_media_metadata
+import metadata
 from release_resolver import resolve_episode_release
 from logging_config import get_logger
 from events import downloads_broadcaster
@@ -48,7 +48,8 @@ class DownloadManager:
             return
 
         try:
-            summary = sync_media_metadata(Path(media_location_value), episodes=get_episodes())
+            episodes = metadata.metadata_constructor.get_episodes()
+            summary = metadata.file_synchronizer.sync_media_metadata(Path(media_location_value), episodes)
             logger.info(
                 "Media metadata synced after disk change: copied=%d skipped=%d removed=%d removed_dirs=%d",
                 summary["copied_files"],
@@ -61,7 +62,7 @@ class DownloadManager:
 
 
     def download_episode(self, episode_id: int, prefer_extended: bool = True):
-        episode_metadata = next(ep for ep in get_episodes() if ep["id"] == episode_id)
+        episode_metadata = next(ep for ep in metadata.metadata_constructor.get_episodes() if ep["id"] == episode_id)
 
         logger.info("Starting download for episode ID: %d", episode_id)
         resolved_release = resolve_episode_release(episode_metadata, prefer_extended=prefer_extended)
@@ -434,7 +435,7 @@ class DownloadManager:
             return {"found": found, "already_tracked": already_tracked, "errors": errors}
 
         prefer_extended = bool(settings["prefer_extended"]["value"])
-        all_episodes = get_episodes()
+        all_episodes = metadata.metadata_constructor.get_episodes()
 
         # Fetch all qbt torrents once; files are fetched lazily per torrent and cached
         all_torrents = []

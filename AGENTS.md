@@ -69,6 +69,7 @@ npx ctx7@latest docs <libraryId> "<user question>"
   - `frontend/src/routes/settings/+page.svelte`
   - README or other setup docs if behavior changes
 - Download state is spread across the DB layer, `download_manager.py`, API routes, and SSE events. Keep those parts consistent when changing statuses or lifecycle behavior.
+- The metadata subsystem is a package. Production code should import `metadata` and use `metadata.metadata_constructor` for Constructed Metadata, `metadata.file_synchronizer` for Media Metadata Synchronization, and `metadata.refresh_build_and_sync_media()` for the combined workflow.
 - qBittorrent path mapping matters for Docker/NFS setups. Be careful when changing anything related to `qbt_path_local`, `qbt_path_remote`, file linking, or disk paths.
 - Prefer mocking qBittorrent, filesystem, and remote metadata sources in tests rather than hitting live services.
 
@@ -138,8 +139,8 @@ pnpm generate-types
 
 - `backend/download_manager.py`
   Coordinates status transitions, qBittorrent actions, linking/copying, and DB updates.
-- `backend/metadata.py`
-  Joins multiple external metadata sources and can affect season/episode identity across the app.
+- `backend/metadata/`
+  Constructs episode metadata from multiple external sources and synchronizes managed metadata files into the media library.
 - `backend/db.py`
   Contains lightweight migrations; schema changes should remain backward-compatible with existing local DBs.
 - `frontend/src/routes/downloads/+page.svelte`

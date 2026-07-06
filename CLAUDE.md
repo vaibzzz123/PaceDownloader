@@ -144,7 +144,7 @@ backend/
 ├── api.py                    - API route definitions
 ├── models.py                 - Pydantic response models (e.g. SeasonResponse)
 ├── db.py                     - SQLite database with settings, torrent, and episode tables
-├── metadata.py               - Episode metadata parsing, NFO + Sheets joining
+├── metadata/                 - Constructed Metadata, Media Metadata Synchronization, and workflow orchestration
 ├── download_manager.py       - Download orchestration with background polling
 ├── qbittorrent.py            - qBittorrent client wrapper
 ├── data_sources.py           - External data fetching (Git clone, Sheets download)
@@ -172,7 +172,7 @@ The backend generates an OpenAPI spec at `/openapi.json` which the frontend uses
    - NFO files from `tissla/one-pace-jellyfin` GitHub repo (cloned to `data/eps-metadata/`)
    - Google Sheets XLSX export containing CRC32 checksums and Nyaa torrent links (saved to `data/sheets/`)
 
-2. **Episode Mapping**: `metadata.py:build_episode_mapping()` joins NFO file data with Google Sheets data to create a unified episode list with torrent info. `metadata.py:refresh_and_build_mapping()` is the single entry point used by both startup and API refresh.
+2. **Constructed Metadata**: `metadata.metadata_constructor` joins NFO file data with Google Sheets data to create a unified episode list with torrent info. Production code should import `metadata` and use `metadata.metadata_constructor` for Constructed Metadata, `metadata.file_synchronizer` for Media Metadata Synchronization, and `metadata.refresh_build_and_sync_media()` for the combined workflow.
 
 3. **API Layer**: FastAPI serves season/episode data to the SvelteKit frontend. Poster images are served as static files (not base64-encoded). Pydantic models in `models.py` define the response shapes and generate the OpenAPI spec.
 
@@ -197,7 +197,7 @@ The backend generates an OpenAPI spec at `/openapi.json` which the frontend uses
 
 - **qbittorrent.py**: Wrapper around `qbittorrent-api`. Handles torrent creation, file priority management (to download specific files), metadata waiting, and path translation for Docker/NFS setups.
 
-- **metadata.py**: Maps integer season numbers (from NFO) to arc names (from Sheets), handles naming mismatches between sources. Has a global metadata handler instance rather than static instances.
+- **metadata/**: Package for the metadata subsystem. `metadata_constructor` maps integer season numbers (from NFO) to arc names (from Sheets) and handles source naming mismatches; `file_synchronizer` manages Jellyfin-readable metadata files under the media location; `refresh_build_and_sync_media()` is the combined workflow.
 
 - **data_sources.py**: Responsible only for downloading and storing raw data (Git clone, Sheets XLSX). 24-hour caching by default.
 

@@ -1,0 +1,437 @@
+"""Build and cache Constructed Metadata for One Pace episodes and seasons."""
+
+import json
+import re
+import time
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any
+
+import defusedxml.ElementTree as ET
+
+from data_sources import (
+    METADATA_CONTENT_DIR,
+    METADATA_DIR,
+    RELEASES_DIR,
+    SHEETS_DIR,
+    fetch_episode_metadata,
+    fetch_onepace_releases,
+    fetch_onepace_sheet,
+)
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
+DEFAULT_MAX_AGE_HOURS = 24
+
+# Module-level caches populated by refresh_and_build_mapping(), read via accessors.
+_episode_cache: list[dict] | None = None
+_season_cache: list[dict] | None = None
+
+
+def get_episodes() -> list[dict]:
+    """Return cached Constructed Metadata episodes."""
+    if _episode_cache is None:
+        raise RuntimeError("Metadata not initialized — call refresh_and_build_mapping first")
+    return _episode_cache
+
+
+def get_seasons() -> list[dict]:
+    """Return cached Constructed Metadata seasons."""
+    if _season_cache is None:
+        raise RuntimeError("Metadata not initialized — call refresh_and_build_mapping first")
+    return _season_cache
+
+
+def _is_metadata_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
+    fetch_head = METADATA_DIR / ".git" / "FETCH_HEAD"
+    if not fetch_head.exists():
+        return False
+    age_hours = (time.time() - fetch_head.stat().st_mtime) / 3600
+    return age_hours < max_age_hours
+
+
+def _is_sheets_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
+    if not SHEETS_DIR.exists():
+        return False
+    json_files = list(SHEETS_DIR.glob("*.json"))
+    if not json_files:
+        return False
+    newest = max(json_files, key=lambda f: f.stat().st_mtime)
+    age_hours = (time.time() - newest.stat().st_mtime) / 3600
+    return age_hours < max_age_hours
+
+
+def _is_releases_fresh(max_age_hours: int = DEFAULT_MAX_AGE_HOURS) -> bool:
+    if not RELEASES_DIR.exists():
+        return False
+    json_files = list(RELEASES_DIR.glob("*.json"))
+    if not json_files:
+        return False
+    newest = max(json_files, key=lambda f: f.stat().st_mtime)
+    age_hours = (time.time() - newest.stat().st_mtime) / 3600
+    return age_hours < max_age_hours
+
+
+def _refresh_data(
+    force: bool = False,
+    max_age_hours: int = DEFAULT_MAX_AGE_HOURS,
+):
+    """Refresh source data used to build Constructed Metadata when it is stale."""
+    if force or not _is_metadata_fresh(max_age_hours):
+        fetch_episode_metadata()
+    else:
+        logger.info("Episode metadata is fresh, skipping refresh")
+
+    if force or not _is_sheets_fresh(max_age_hours):
+        fetch_onepace_sheet()
+    else:
+        logger.info("Sheets data is fresh, skipping refresh")
+
+    if force or not _is_releases_fresh(max_age_hours):
+        fetch_onepace_releases()
+    else:
+        logger.info("Release feed data is fresh, skipping refresh")
+
+
+def _build_season_to_arc_map(arc_overview: list[dict]) -> dict[int, dict]:
+    """
+    Build a mapping from integer season numbers to arc information.
+
+    The NFO files use integer seasons (1-36), but arc_overview.json uses
+    fractional arc numbers (1.0, 6.5, 9.5, etc.). This function sorts arcs
+    by their number and assigns sequential integer season numbers.
+
+    Args:
+        arc_overview: List of arc data from arc_overview.json
+
+    Returns:
+        Dict mapping season number to arc info with keys:
+        - arc_name: Cleaned arc name (without TBR/WIP suffixes)
+        - arc_no: Original arc number from sheets
+        - json_filename: Expected JSON filename for this arc's episodes
+    """
+    valid_arcs = [
+        arc for arc in arc_overview
+        if arc.get("No.") is not None and isinstance(arc.get("No."), (int, float))
+    ]
+
+    sorted_arcs = sorted(valid_arcs, key=lambda x: float(x["No."]))
+
+    season_map = {}
+    logger.debug("Building season map from %d valid arcs", len(sorted_arcs))
+    for season_num, arc in enumerate(sorted_arcs, start=1):
+        arc_name_raw = arc["Arcs"]["text"] if isinstance(arc["Arcs"], dict) else arc["Arcs"]
+        arc_name_clean = re.sub(r"\s*\((TBR|WIP)\)\s*", "", arc_name_raw).strip()
+        json_filename = (
+            arc_name_clean
+            .replace("/", "-")
+            .replace(" ", "_")
+            .replace("'", "")
+            .lower()
+            + ".json"
+        )
+
+        season_map[season_num] = {
+            "arc_name": arc_name_clean,
+            "arc_no": arc["No."],
+            "json_filename": json_filename,
+        }
+
+    return season_map
+
+
+def _parse_episode_number(ep_value: str) -> int:
+    """
+    Extract episode number from "Arc Name ##" format.
+
+    Args:
+        ep_value: Episode identifier like "Romance Dawn 01" or "Egghead 08"
+
+    Returns:
+        Episode number as integer, or 1 for single-episode arcs without number
+    """
+    ep_value = ep_value.strip()
+
+    match = re.search(r"(\d+)", ep_value)
+    if match:
+        return int(match.group(1))
+
+    return 1
+
+
+def _get_sheet_value(row: dict | None, column_name: str) -> Any:
+    if not row:
+        return None
+    for key, value in row.items():
+        if key is not None and str(key).strip() == column_name:
+            return value
+    return None
+
+
+def _extract_crc32_cell(value: Any) -> tuple[str | None, str | None]:
+    """Return (crc32, link) from old hyperlink cells or current plain CRC strings."""
+    if isinstance(value, dict):
+        text = value.get("text")
+        link = value.get("link")
+        return (str(text).strip() if text else None, link)
+    if isinstance(value, str):
+        stripped = value.strip()
+        return (stripped or None, None)
+    return None, None
+
+
+def _normalize_sheet_release_date(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        for fmt in ("%Y.%m.%d", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(stripped, fmt).date().isoformat()
+            except ValueError:
+                continue
+        return stripped
+    return str(value)
+
+
+def _find_arc_json_file(sheets_dir: Path, json_filename: str) -> Path | None:
+    """
+    Find the JSON file for an arc, handling naming mismatches.
+
+    Some arc names in arc_overview.json don't exactly match the sheet tab names,
+    e.g., "The Adventures of the Straw Hats" vs "The Adventures of the Straw Hat".
+
+    Note: This is caused by a Google Sheets XLSX export bug that corrupts sheet tab
+    names - dropping trailing 's' and apostrophes. The arc_overview cell content is
+    correct, but the exported tab names lose these characters.
+    """
+    json_path = sheets_dir / json_filename
+    if json_path.exists():
+        return json_path
+
+    base_name = json_filename[:-5]
+
+    if base_name.endswith("s"):
+        alt_path = sheets_dir / f"{base_name[:-1]}.json"
+        if alt_path.exists():
+            return alt_path
+
+    alt_path = sheets_dir / f"{base_name}s.json"
+    if alt_path.exists():
+        return alt_path
+
+    return None
+
+
+def _load_arc_episodes(sheets_dir: Path, season_map: dict[int, dict]) -> dict[tuple[str, int], dict]:
+    """
+    Load all arc JSON files and create a mapping from (arc_name, ep_num) to row data.
+
+    Args:
+        sheets_dir: Path to the sheets directory containing arc JSON files
+        season_map: Mapping from season number to arc info
+
+    Returns:
+        Dict mapping (arc_name, episode_number) tuples to sheet row data
+    """
+    arc_episode_map = {}
+
+    for arc_info in season_map.values():
+        json_path = _find_arc_json_file(sheets_dir, arc_info["json_filename"])
+
+        if json_path is None:
+            logger.warning(
+                "Missing JSON file for arc '%s': %s",
+                arc_info["arc_name"],
+                arc_info["json_filename"],
+            )
+            continue
+
+        with open(json_path) as f:
+            episodes = json.load(f)
+
+        for row in episodes:
+            ep_col_value = _get_sheet_value(row, "One Pace Episode")
+
+            if ep_col_value is None or not isinstance(ep_col_value, str):
+                continue
+
+            ep_num = _parse_episode_number(ep_col_value)
+            key = (arc_info["arc_name"], ep_num)
+            if key not in arc_episode_map:
+                arc_episode_map[key] = row
+
+    return arc_episode_map
+
+
+def _parse_nfo_files(metadata_dir: Path) -> tuple[list[dict], list[dict]]:
+    """
+    Parse season and episode NFO files used to build Constructed Metadata.
+
+    Filename format: "One Pace - S##E## - Title.nfo"
+    """
+    episodes = []
+    seasons = []
+    filename_pattern = re.compile(r"One Pace - S(\d+)E(\d+) - (.+)")
+
+    descriptions_path = Path(__file__).parents[1] / "season_descriptions.json"
+    if descriptions_path.exists():
+        with open(descriptions_path) as f:
+            season_descriptions = json.load(f)
+    else:
+        logger.warning("Season descriptions file not found: %s", descriptions_path)
+        season_descriptions = {}
+
+    season_dirs = sorted(
+        metadata_dir.glob("Season *"),
+        key=lambda p: int(p.name.split()[-1]),
+    )
+    skip_files = {
+        "One Pace - S06E05 - Live (Extended)",
+    }
+
+    for season_dir in season_dirs:
+        season_nfo = season_dir / "season.nfo"
+        if season_nfo.exists():
+            try:
+                tree = ET.parse(season_nfo)
+                root = tree.getroot()
+                title_elem = root.find("title")
+                if title_elem is not None and title_elem.text:
+                    season_number, season_title = title_elem.text.split(".")
+                    season_num_str = season_dir.name
+                    seasons.append({
+                        "num": int(season_number),
+                        "title": season_title.strip(),
+                        "image": f"/posters/{season_num_str}/poster.png",
+                        "description": season_descriptions.get(season_title.strip(), ""),
+                    })
+            except Exception as e:
+                logger.warning("Failed to parse season NFO %s: %s", season_nfo, e)
+
+        for nfo_file in sorted(season_dir.glob("One Pace - S*E* - *.nfo")):
+            if nfo_file.stem in skip_files:
+                continue
+            match = filename_pattern.match(nfo_file.stem)
+            if match:
+                episodes.append({
+                    "filename": nfo_file.stem,
+                    "season": int(match.group(1)),
+                    "episode": int(match.group(2)),
+                    "title": match.group(3),
+                })
+
+    return episodes, seasons
+
+
+def _build_episode_mapping(media_location: Path | None) -> tuple[list[dict], list[dict]]:
+    """
+    Build Constructed Metadata by joining One Pace NFO metadata with sheet data.
+
+    Args:
+        media_location: Base path where media files are/will be stored
+
+    Returns:
+        Tuple of (episodes, seasons) where episodes is a list of dicts and
+        seasons is a list of dicts with season info (num, title, image, description).
+    """
+    with open(SHEETS_DIR / "arc_overview.json") as f:
+        arc_overview = json.load(f)
+
+    season_map = _build_season_to_arc_map(arc_overview)
+    arc_episode_map = _load_arc_episodes(SHEETS_DIR, season_map)
+    nfo_episodes, seasons = _parse_nfo_files(METADATA_CONTENT_DIR)
+
+    results = []
+    logger.debug("Processing %d NFO episodes", len(nfo_episodes))
+
+    for episode_id, nfo in enumerate(nfo_episodes, start=1):
+        season_num = nfo["season"]
+        ep_num = nfo["episode"]
+
+        arc_info = season_map.get(season_num)
+        if arc_info is None:
+            logger.warning("No arc mapping for season %d", season_num)
+            continue
+
+        sheet_key = (arc_info["arc_name"], ep_num)
+        sheet_row = arc_episode_map.get(sheet_key)
+
+        torrent_link = None
+        crc32 = None
+        torrent_link_extended = None
+        crc32_extended = None
+        sheet_episode_name = None
+        release_date = None
+
+        if sheet_row:
+            sheet_episode_name_raw = _get_sheet_value(sheet_row, "One Pace Episode")
+            if isinstance(sheet_episode_name_raw, str):
+                sheet_episode_name = sheet_episode_name_raw.strip()
+
+            release_date = _normalize_sheet_release_date(_get_sheet_value(sheet_row, "Release Date"))
+
+            crc32, torrent_link = _extract_crc32_cell(_get_sheet_value(sheet_row, "MKV CRC32"))
+            crc32_extended, torrent_link_extended = _extract_crc32_cell(
+                _get_sheet_value(sheet_row, "MKV CRC32 (Extended)")
+            )
+
+        duration = None
+        if sheet_row:
+            length_raw = sheet_row.get("Length")
+            if length_raw and isinstance(length_raw, str):
+                duration = length_raw[3:] if length_raw.startswith("00:") else length_raw
+
+        file_location = ""
+        if media_location is not None:
+            file_location = str(
+                media_location.resolve() / f"Season {season_num}" / f"{nfo['filename']}.mkv"
+            )
+
+        results.append({
+            "id": episode_id,
+            "ep_name": nfo["filename"],
+            "title": nfo["title"],
+            "season": season_num,
+            "ep_number": ep_num,
+            "duration": duration,
+            "file_location_media": file_location,
+            "sheet_episode_name": sheet_episode_name,
+            "release_date": release_date,
+            "torrent_link": torrent_link,
+            "crc32": crc32,
+            "torrent_link_extended": torrent_link_extended,
+            "crc32_extended": crc32_extended,
+        })
+
+    return results, seasons
+
+
+def _save_metadata_mapping(mapping: list[dict], media_location: Path | None):
+    """Save Constructed Metadata episodes to a JSON file in the app data directory."""
+    output_path = Path("data/constructed_metadata.json")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(mapping, f, indent=2)
+    logger.info("Saved constructed metadata mapping to %s", output_path)
+
+
+def refresh_and_build_mapping(
+    media_location: Path | None,
+    force_refresh: bool = False,
+    save_mapping: bool = False,
+):
+    """Refresh source data and rebuild cached Constructed Metadata."""
+    global _episode_cache, _season_cache
+    _refresh_data(force=force_refresh)
+    _episode_cache, _season_cache = _build_episode_mapping(media_location)
+    if save_mapping:
+        _save_metadata_mapping(_episode_cache, media_location)
+    return _episode_cache

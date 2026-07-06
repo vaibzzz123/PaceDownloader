@@ -103,7 +103,7 @@ def test_health_route_does_not_return_raw_exception_details(mock_db, mock_get_do
     assert b'"qbittorrent":"error"' in result.body
 
 
-@patch("api.get_seasons")
+@patch("api.metadata.metadata_constructor.get_seasons")
 def test_get_seasons_route_returns_503_when_metadata_is_unavailable(mock_get_seasons):
     from api import get_seasons_route
 

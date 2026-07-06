@@ -20,7 +20,7 @@ from models import (
     SetupPathMappingValidationRequest,
     SetupValidationResponse,
 )
-from metadata import get_seasons, get_episodes, refresh_build_and_sync_media
+import metadata
 from dependencies import get_download_manager
 from download_manager import DownloadManager
 from events import downloads_broadcaster
@@ -58,14 +58,14 @@ def _metadata_unavailable(exc: RuntimeError) -> HTTPException:
 
 def _get_seasons_or_503() -> list[dict]:
     try:
-        return get_seasons()
+        return metadata.metadata_constructor.get_seasons()
     except RuntimeError as exc:
         raise _metadata_unavailable(exc) from exc
 
 
 def _get_episodes_or_503() -> list[dict]:
     try:
-        return get_episodes()
+        return metadata.metadata_constructor.get_episodes()
     except RuntimeError as exc:
         raise _metadata_unavailable(exc) from exc
 
@@ -177,7 +177,7 @@ def list_torrent_downloads_route(dm: DownloadManager = Depends(get_download_mana
 
 @router.post("/episode/{episode_id}/download", response_model=EpisodeResponse)
 async def download_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
-    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    ep = next((ep for ep in metadata.metadata_constructor.get_episodes() if ep["id"] == episode_id), None)
     if ep is None:
         raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
 
@@ -202,7 +202,7 @@ async def download_episode_route(episode_id: int, dm: DownloadManager = Depends(
 
 @router.post("/episode/{episode_id}/pause", response_model=EpisodeResponse)
 async def pause_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
-    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    ep = next((ep for ep in metadata.metadata_constructor.get_episodes() if ep["id"] == episode_id), None)
     if ep is None:
         raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
 
@@ -226,7 +226,7 @@ async def pause_episode_route(episode_id: int, dm: DownloadManager = Depends(get
 
 @router.post("/episode/{episode_id}/resume", response_model=EpisodeResponse)
 async def resume_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
-    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    ep = next((ep for ep in metadata.metadata_constructor.get_episodes() if ep["id"] == episode_id), None)
     if ep is None:
         raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
 
@@ -250,7 +250,7 @@ async def resume_episode_route(episode_id: int, dm: DownloadManager = Depends(ge
 
 @router.delete("/episode/{episode_id}", status_code=204)
 async def remove_episode_route(episode_id: int, dm: DownloadManager = Depends(get_download_manager)):
-    ep = next((ep for ep in get_episodes() if ep["id"] == episode_id), None)
+    ep = next((ep for ep in metadata.metadata_constructor.get_episodes() if ep["id"] == episode_id), None)
     if ep is None:
         raise HTTPException(status_code=404, detail=f"Episode {episode_id} not found")
 
@@ -300,7 +300,7 @@ async def resume_torrent_route(infohash: str, dm: DownloadManager = Depends(get_
 
 @router.post("/season/{season_num}/download", response_model=list[EpisodeResponse])
 async def download_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
-    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    season_episodes = [ep for ep in metadata.metadata_constructor.get_episodes() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
     prefer_extended = app_settings.get_setting_value("prefer_extended")
@@ -325,7 +325,7 @@ async def download_season_route(season_num: int, dm: DownloadManager = Depends(g
 
 @router.post("/season/{season_num}/pause", response_model=list[EpisodeResponse])
 async def pause_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
-    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    season_episodes = [ep for ep in metadata.metadata_constructor.get_episodes() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
     for ep in season_episodes:
@@ -347,7 +347,7 @@ async def pause_season_route(season_num: int, dm: DownloadManager = Depends(get_
 
 @router.post("/season/{season_num}/resume", response_model=list[EpisodeResponse])
 async def resume_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
-    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    season_episodes = [ep for ep in metadata.metadata_constructor.get_episodes() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
     for ep in season_episodes:
@@ -369,7 +369,7 @@ async def resume_season_route(season_num: int, dm: DownloadManager = Depends(get
 
 @router.delete("/season/{season_num}", status_code=204)
 async def delete_season_route(season_num: int, dm: DownloadManager = Depends(get_download_manager)):
-    season_episodes = [ep for ep in get_episodes() if ep["season"] == season_num]
+    season_episodes = [ep for ep in metadata.metadata_constructor.get_episodes() if ep["season"] == season_num]
     if not season_episodes:
         raise HTTPException(status_code=404, detail=f"No episodes found for season {season_num}")
     for ep in season_episodes:
@@ -480,7 +480,7 @@ async def sync_metadata_route():
         raise HTTPException(status_code=422, detail="Media data location is not configured")
 
     result = await asyncio.to_thread(
-        refresh_build_and_sync_media,
+        metadata.refresh_build_and_sync_media,
         Path(media_location_value),
         False,
         True,

@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 
 import api
-import metadata
+from metadata import file_synchronizer
 
 
 def _write_file(path: Path, content: str = "x"):
@@ -28,7 +28,7 @@ def _build_episode(media_root: Path, season: int, episode_number: int, present: 
 
 
 def _create_sources(metadata_root: Path, assets_root: Path, season_totals: dict[int, int]):
-    for filename in metadata.ROOT_METADATA_FILES:
+    for filename in file_synchronizer.ROOT_METADATA_FILES:
         _write_file(metadata_root / filename, filename)
 
     for filename in ("backdrop.jpg", "backdrop-2.jpg", "backdrop-3.jpg", "backdrop-4.jpg"):
@@ -49,8 +49,8 @@ def _create_sources(metadata_root: Path, assets_root: Path, season_totals: dict[
 
 
 def _patch_sources(monkeypatch, metadata_root: Path, assets_root: Path):
-    monkeypatch.setattr(metadata, "METADATA_CONTENT_DIR", metadata_root)
-    monkeypatch.setattr(metadata, "ASSETS_DIR", assets_root)
+    monkeypatch.setattr(file_synchronizer, "METADATA_CONTENT_DIR", metadata_root)
+    monkeypatch.setattr(file_synchronizer, "ASSETS_DIR", assets_root)
 
 
 def test_sync_media_metadata_copies_relevant_files_and_removes_stale_managed_files(monkeypatch, tmp_path: Path):
@@ -72,7 +72,7 @@ def test_sync_media_metadata_copies_relevant_files_and_removes_stale_managed_fil
     _write_file(media_root / "Season 13" / "season.nfo", "stale")
     _write_file(media_root / "Season 14" / f"{_episode_stem(14, 2)}.nfo", "stale")
 
-    summary = metadata.sync_media_metadata(media_root, episodes)
+    summary = file_synchronizer.sync_media_metadata(media_root, episodes)
 
     assert summary["active_seasons"] == [14, 15]
     assert summary["enabled_backdrops"] == ["backdrop-3.jpg", "backdrop-5.jpg", "backdrop-6.jpg"]
@@ -110,7 +110,7 @@ def test_sync_media_metadata_preserves_unknown_files_when_directory_cannot_be_re
     _write_file(media_root / "Season 14" / "season.nfo", "stale")
     _write_file(media_root / "Season 14" / "custom.txt", "keep me")
 
-    summary = metadata.sync_media_metadata(media_root, episodes)
+    summary = file_synchronizer.sync_media_metadata(media_root, episodes)
 
     assert summary["removed_directories"] == 0
     assert (media_root / "Season 14").exists()
@@ -133,7 +133,7 @@ def test_sync_media_metadata_removes_skipped_extended_nfo_from_inactive_season(m
     ]
     _write_file(media_root / "Season 6" / "One Pace - S06E05 - Live (Extended).nfo", "stale")
 
-    summary = metadata.sync_media_metadata(media_root, episodes)
+    summary = file_synchronizer.sync_media_metadata(media_root, episodes)
 
     assert summary["removed_files"] == 1
     assert summary["removed_directories"] == 1
@@ -152,7 +152,7 @@ def test_sync_media_metadata_uses_halfway_rules_for_half_season_backdrops(monkey
         *[_build_episode(media_root, 19, episode_number, present=episode_number <= 12) for episode_number in range(1, 26)],
     ]
 
-    summary = metadata.sync_media_metadata(media_root, episodes)
+    summary = file_synchronizer.sync_media_metadata(media_root, episodes)
 
     assert "backdrop-7.jpg" in summary["enabled_backdrops"]
     assert "backdrop-8.jpg" not in summary["enabled_backdrops"]
@@ -170,7 +170,7 @@ def test_sync_media_metadata_uses_latest_season_final_episode_exception(monkeypa
         for episode_number in range(1, 21)
     ]
 
-    summary = metadata.sync_media_metadata(media_root, episodes)
+    summary = file_synchronizer.sync_media_metadata(media_root, episodes)
 
     assert "backdrop.jpg" in summary["enabled_backdrops"]
     assert (media_root / "backdrop.jpg").exists()
@@ -187,7 +187,7 @@ def test_metadata_sync_route_returns_summary(monkeypatch):
     )
     monkeypatch.setattr(api.asyncio, "to_thread", fake_to_thread)
     monkeypatch.setattr(
-        api,
+        api.metadata,
         "refresh_build_and_sync_media",
         lambda media_location, force_refresh, save_mapping: {
             "copied_files": 3,

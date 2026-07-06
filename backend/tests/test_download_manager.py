@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import db
 import download_manager
+import metadata
 from download_manager import DownloadManager
 from release_resolver import ResolvedRelease
 
@@ -85,7 +86,7 @@ def test_download_episode_uses_release_resolver_crc32_and_magnet(monkeypatch, tm
         "crc32_extended": "FACEFEED",
         "file_location_media": "/media/Season 1/Fixture Release [DEADBEEF].mkv",
     }
-    monkeypatch.setattr(download_manager, "get_episodes", lambda: [episode])
+    monkeypatch.setattr(metadata.metadata_constructor, "get_episodes", lambda: [episode])
 
     infohash = "a" * 40
     resolved_release = ResolvedRelease(
@@ -161,9 +162,9 @@ def test_add_episode_to_data_location_syncs_media_metadata(monkeypatch, tmp_path
     sync_calls = []
 
     monkeypatch.setattr(download_manager.app_settings, "get_setting_value", lambda field: str(media_root))
-    monkeypatch.setattr(download_manager, "get_episodes", lambda: episodes)
+    monkeypatch.setattr(metadata.metadata_constructor, "get_episodes", lambda: episodes)
     monkeypatch.setattr(
-        download_manager,
+        metadata.file_synchronizer,
         "sync_media_metadata",
         lambda media_location, episodes: sync_calls.append((media_location, episodes))
         or {
@@ -204,9 +205,9 @@ def test_metadata_sync_failure_does_not_fail_episode_placement(monkeypatch, tmp_
     )
 
     monkeypatch.setattr(download_manager.app_settings, "get_setting_value", lambda field: str(media_root))
-    monkeypatch.setattr(download_manager, "get_episodes", lambda: [])
+    monkeypatch.setattr(metadata.metadata_constructor, "get_episodes", lambda: [])
     monkeypatch.setattr(
-        download_manager,
+        metadata.file_synchronizer,
         "sync_media_metadata",
         lambda media_location, episodes: (_ for _ in ()).throw(RuntimeError("metadata unavailable")),
     )

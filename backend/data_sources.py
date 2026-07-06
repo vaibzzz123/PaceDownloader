@@ -21,6 +21,7 @@ GOOGLE_SHEET_ID = "1HQRMJgu_zArp-sLnvFMDzOyjdsht87eFLECxMK858lA"
 ONEPACE_RELEASES_RSS_URL = "https://onepace.net/en/releases/rss.xml"
 
 METADATA_DIR = Path("data/eps-metadata")
+METADATA_CONTENT_DIR = METADATA_DIR / "One Pace"
 SHEETS_DIR = Path("data/sheets")
 RELEASES_DIR = Path("data/releases")
 RELEASES_JSON_PATH = RELEASES_DIR / "onepace_releases.json"

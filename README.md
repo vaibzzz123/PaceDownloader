@@ -299,7 +299,7 @@ backend/
 ├── api.py               - REST API routes
 ├── models.py            - Pydantic response models
 ├── db.py                - SQLite helpers (settings, downloads)
-├── metadata.py          - Episode metadata parsing and joining
+├── metadata/            - Metadata construction, file synchronization, workflow orchestration
 ├── download_manager.py  - Download orchestration + polling
 ├── qbittorrent.py       - qBittorrent client wrapper
 ├── data_sources.py      - Git clone + Sheets/release feed downloads

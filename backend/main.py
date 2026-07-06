@@ -26,7 +26,7 @@ from qbittorrent import QbittorrentClient
 from download_manager import DownloadManager
 from dependencies import set_download_manager
 from api import router as api_router
-from metadata import refresh_build_and_sync_media
+import metadata
 from events import downloads_broadcaster, metadata_broadcaster
 
 logger.info("Starting Pace Downloader backend")
@@ -40,7 +40,7 @@ else:
     try:
         media_location_value = app_settings.get_setting_value("media_data_location")
         media_location = Path(media_location_value) if media_location_value else None
-        refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
+        metadata.refresh_build_and_sync_media(media_location, force_refresh=False, save_mapping=True)
     except Exception as e:
         logger.warning("Episode metadata is unavailable; browse routes will return 503: %s", e)
     else:

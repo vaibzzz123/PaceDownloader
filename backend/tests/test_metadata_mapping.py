@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-import metadata
+from metadata import metadata_constructor
 
 
 def _write_json(path: Path, data):
@@ -57,10 +57,10 @@ def test_build_episode_mapping_normalizes_sheet_episode_fields(monkeypatch, tmp_
     _write_file(metadata_root / "Season 1" / "One Pace - S01E01 - First Episode.nfo")
     _write_file(metadata_root / "Season 1" / "One Pace - S01E02 - Second Episode.nfo")
 
-    monkeypatch.setattr(metadata, "SHEETS_DIR", sheets_root)
-    monkeypatch.setattr(metadata, "METADATA_CONTENT_DIR", metadata_root)
+    monkeypatch.setattr(metadata_constructor, "SHEETS_DIR", sheets_root)
+    monkeypatch.setattr(metadata_constructor, "METADATA_CONTENT_DIR", metadata_root)
 
-    episodes, seasons = metadata._build_episode_mapping(media_location=None)
+    episodes, seasons = metadata_constructor._build_episode_mapping(media_location=None)
 
     assert seasons == [
         {

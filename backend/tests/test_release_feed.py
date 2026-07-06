@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 import data_sources
-import metadata
+from metadata import metadata_constructor
 
 
 RSS_SAMPLE = """<?xml version="1.0" encoding="utf-8"?>
@@ -143,13 +143,13 @@ def test_fetch_episode_metadata_refuses_non_git_directory_with_existing_files(
 def test_refresh_data_fetches_releases_when_stale(monkeypatch):
     calls = []
 
-    monkeypatch.setattr(metadata, "_is_metadata_fresh", lambda max_age_hours: True)
-    monkeypatch.setattr(metadata, "_is_sheets_fresh", lambda max_age_hours: True)
-    monkeypatch.setattr(metadata, "_is_releases_fresh", lambda max_age_hours: False)
-    monkeypatch.setattr(metadata, "fetch_episode_metadata", lambda: calls.append("metadata"))
-    monkeypatch.setattr(metadata, "fetch_onepace_sheet", lambda: calls.append("sheets"))
-    monkeypatch.setattr(metadata, "fetch_onepace_releases", lambda: calls.append("releases"))
+    monkeypatch.setattr(metadata_constructor, "_is_metadata_fresh", lambda max_age_hours: True)
+    monkeypatch.setattr(metadata_constructor, "_is_sheets_fresh", lambda max_age_hours: True)
+    monkeypatch.setattr(metadata_constructor, "_is_releases_fresh", lambda max_age_hours: False)
+    monkeypatch.setattr(metadata_constructor, "fetch_episode_metadata", lambda: calls.append("metadata"))
+    monkeypatch.setattr(metadata_constructor, "fetch_onepace_sheet", lambda: calls.append("sheets"))
+    monkeypatch.setattr(metadata_constructor, "fetch_onepace_releases", lambda: calls.append("releases"))
 
-    metadata._refresh_data()
+    metadata_constructor._refresh_data()
 
     assert calls == ["releases"]
