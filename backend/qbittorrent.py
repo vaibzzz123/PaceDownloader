@@ -4,6 +4,7 @@ from enum import Enum
 
 import qbittorrentapi
 from qbittorrentapi import TorrentDictionary
+from qbittorrentapi.torrents import TorrentsAddedMetadata
 from app_settings import get_settings
 from logging_config import get_logger
 
@@ -58,18 +59,19 @@ class QbittorrentClient:
         """Add a torrent to qBittorrent using its magnet link, waiting until metadata is fetched."""
 
         logger.debug("Adding torrent %s to qBittorrent", torrent_magnet_link)
+        info_hash = self.extract_info_hash(torrent_magnet_link)
         try:
-            info_hash = self.extract_info_hash(torrent_magnet_link)
             resp = self._client.torrents_add(
                 urls=torrent_magnet_link,
                 category=self._category if self._category else None,
                 save_path=self._download_location if self._download_location else None,
             )
-            if resp == "Fails.":
-                # Torrent already exists in qBittorrent (duplicate add) — proceed to use it
-                logger.info("Torrent %s already in qBittorrent, reusing", info_hash)
-            elif resp != "Ok.":
+            if self._torrent_add_failed(resp):
                 raise Exception(f"Failed to add torrent: {resp}")
+            if resp == "Fails.":
+                logger.info("Torrent %s already in qBittorrent, reusing", info_hash)
+            elif isinstance(resp, TorrentsAddedMetadata):
+                logger.info("Added torrent %s: %s", info_hash, resp)
             else:
                 logger.info("Added torrent for magnet link: %s", torrent_magnet_link)
             logger.info(
@@ -77,6 +79,8 @@ class QbittorrentClient:
                 info_hash,
             )
 
+        except qbittorrentapi.Conflict409Error:
+            logger.info("Torrent %s already exists in qBittorrent, reusing", info_hash)
         except Exception as e:
             logger.error(
                 "Failed to add torrent with magnet link %s: %s", torrent_magnet_link, e
@@ -106,6 +110,12 @@ class QbittorrentClient:
                 "Failed to retrieve torrent info for hash %s: %s", info_hash, e
             )
             raise
+
+    @staticmethod
+    def _torrent_add_failed(response: str | TorrentsAddedMetadata) -> bool:
+        if isinstance(response, TorrentsAddedMetadata):
+            return int(response.get("success_count", 0)) == 0
+        return response not in ("Ok.", "Fails.")
 
     def extract_info_hash(self, torrent_magnet_link: str) -> str:
         """Extract info hash from a magnet link."""
