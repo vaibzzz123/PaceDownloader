@@ -294,7 +294,9 @@ def get_torrent_download(infohash: str) -> dict | None:
 
 def get_all_torrent_downloads() -> list[dict]:
     with get_db() as con:
-        rows = con.execute("SELECT * FROM torrent_download").fetchall()
+        rows = con.execute(
+            "SELECT * FROM torrent_download ORDER BY created_at DESC, infohash ASC"
+        ).fetchall()
         return [dict(row) for row in rows]
 
 
@@ -372,7 +374,9 @@ def get_episode_downloads_by_torrent(torrent_infohash: str) -> list[dict]:
 
 def get_all_episode_downloads() -> list[dict]:
     with get_db() as con:
-        rows = con.execute("SELECT * FROM episode_download").fetchall()
+        rows = con.execute(
+            "SELECT * FROM episode_download ORDER BY created_at DESC, CAST(ep_id AS INTEGER) DESC"
+        ).fetchall()
         return [dict(row) for row in rows]
 
 

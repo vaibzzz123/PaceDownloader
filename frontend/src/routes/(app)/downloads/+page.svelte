@@ -29,6 +29,13 @@
   $effect(() => { episodes = data.episodes.map(e => ({ ...e })); });
   $effect(() => { torrents = data.torrents.map(t => ({ ...t })); });
 
+  function activeDownloadsFirst(left: { status: string }, right: { status: string }) {
+    return Number(right.status === 'Downloading') - Number(left.status === 'Downloading');
+  }
+
+  const sortedEpisodes = $derived([...episodes].sort(activeDownloadsFirst));
+  const sortedTorrents = $derived([...torrents].sort(activeDownloadsFirst));
+
   const highlightId = $derived(page.url.searchParams.get("id") ?? undefined);
 
   let episodeLoadingIds = new SvelteSet<number | string>();
@@ -159,7 +166,7 @@
   </Tabs.List>
   <Tabs.Content value="episodes">
     <span class="mb-3 chip bg-black/10 dark:bg-white/20 hover:bg-black/20 dark:hover:bg-white/20">Note: Pausing/resuming an episode download will pause/resume the entire torrent, potentially affecting other episodes in the same torrent.</span>
-    <ColorTable data={episodes} searchBox={true} searchableFields={['ep_id', 'title', 'status', 'torrent_name']} highlightId={highlightId} idKey="ep_id">
+    <ColorTable data={sortedEpisodes} searchBox={true} searchableFields={['ep_id', 'title', 'status', 'torrent_name']} highlightId={highlightId} idKey="ep_id">
       {#snippet header()}
         <th>Episode ID</th>
         <th>Name</th>
@@ -202,7 +209,7 @@
     </ColorTable>
   </Tabs.Content>
   <Tabs.Content value="torrents">
-    <ColorTable data={torrents} searchBox={true} searchableFields={['name', 'status', 'ep_ids']} highlightId={highlightId} idKey="infohash">
+    <ColorTable data={sortedTorrents} searchBox={true} searchableFields={['name', 'status', 'ep_ids']} highlightId={highlightId} idKey="infohash">
       {#snippet header()}
         <th>Name</th>
         <th>Status</th>
