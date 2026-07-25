@@ -28,6 +28,14 @@ _Avoid_: Jellyfin library path, Jellyfin media path
 The episode and season information Pace Downloader builds from One Pace source metadata for browsing, downloads, and media placement.
 _Avoid_: metadata cache, metadata mapping
 
+**Episode Sheet Source Data**:
+The downloaded exports and parsed rows Pace Downloader stores from the One Pace Episode Guide spreadsheet before building **Constructed Metadata**.
+_Avoid_: Episode Guide Source Data, sheet tab data, metadata cache
+
+**Arc Status Suffix**:
+A status marker such as `(TBR)` or `(WIP)` appended to an arc name in the One Pace Episode Guide.
+_Avoid_: moniker, tag, title suffix
+
 **Managed Metadata Files**:
 The Jellyfin-readable image and NFO files Pace Downloader owns under the **Media Data Location**.
 _Avoid_: source metadata, constructed metadata
@@ -56,6 +64,13 @@ _Avoid_: media mapping, Jellyfin mapping
 - A changed **Restart-Applied Setting** creates **Restart Required**.
 - **Effective Setting** values decide whether **Initial Setup** has enough configuration; environment variables count.
 - **Media Data Location** is owned from Pace Downloader's filesystem perspective; Jellyfin may mount the same data at a different path.
+- **Episode Sheet Source Data** includes the overview and per-arc episode rows from the One Pace Episode Guide spreadsheet.
+- **Episode Sheet Source Data** keeps raw CSV and XLSX exports available for parser retries without refetching from Google.
+- **Episode Sheet Source Data** stores raw CSV exports per tab under a source-specific cache directory.
+- **Episode Sheet Source Data** derives per-arc tab names from overview arc names without **Arc Status Suffixes**.
+- **Episode Sheet Source Data** refreshes preserve the previous complete cache when any required tab fails to refresh.
+- **Episode Sheet Source Data** normalizes only fields needed to build **Constructed Metadata**.
+- **Episode Sheet Source Data** is one source used to build **Constructed Metadata**.
 - **Constructed Metadata** is built before Pace Downloader can reliably browse episodes, resolve downloads, or perform **Media Metadata Synchronization**.
 - **Media Metadata Synchronization** writes and removes only **Managed Metadata Files** under the **Media Data Location**.
 - **qBittorrent Path Mapping** is required only when qBittorrent reports paths that Pace Downloader cannot use directly.
@@ -71,6 +86,16 @@ _Avoid_: media mapping, Jellyfin mapping
 > **Domain expert:** "No — qBittorrent connection settings are **Restart-Applied Settings**."
 > **Dev:** "Should the user enter Jellyfin's library path for **Media Data Location**?"
 > **Domain expert:** "No — Pace Downloader needs the path it can write to."
+> **Dev:** "Is **Episode Sheet Source Data** just the Arc Overview tab?"
+> **Domain expert:** "No — it means the ingested One Pace Episode Guide spreadsheet rows, including Arc Overview and the per-arc episode tabs."
+> **Dev:** "Should `(TBR)` be part of the tab name when loading **Episode Sheet Source Data**?"
+> **Domain expert:** "No — `(TBR)` and `(WIP)` are **Arc Status Suffixes**, not part of the per-arc tab name."
+> **Dev:** "If one tab fails during an **Episode Sheet Source Data** refresh, should we keep the tabs that succeeded?"
+> **Domain expert:** "No — keep the previous complete cache rather than mixing old and new tabs."
+> **Dev:** "If Arc Overview adds a new arc, should parsing update the JSON cache before the new tab CSV is present?"
+> **Domain expert:** "No — all required raw tab exports must be present before parsed rows are promoted."
+> **Dev:** "Should the CSV import infer numbers and dates for every Episode Guide column?"
+> **Domain expert:** "No — normalize only the fields needed to build **Constructed Metadata**."
 > **Dev:** "Is **Media Metadata Synchronization** the same thing as building **Constructed Metadata**?"
 > **Domain expert:** "No — **Constructed Metadata** is the app's episode and season view; **Media Metadata Synchronization** changes Jellyfin-readable files on disk."
 > **Dev:** "When does **qBittorrent Path Mapping** matter?"
@@ -82,4 +107,6 @@ _Avoid_: media mapping, Jellyfin mapping
 - "core important stuff" was resolved to **Restart-Applied Setting**.
 - "media location" was resolved to **Media Data Location**, the path visible to Pace Downloader, not Jellyfin.
 - "metadata" can mean **Constructed Metadata**, **Managed Metadata Files**, or **Media Metadata Synchronization**; prefer the precise term when discussing responsibilities.
+- "episode sheet" refers to the whole One Pace Episode Guide spreadsheet source, not only one Google Sheets tab.
+- "extra moniker" was resolved to **Arc Status Suffix** for `(TBR)` and `(WIP)` markers on Episode Guide arc names.
 - "path mapping" was resolved to **qBittorrent Path Mapping**, translating qBittorrent-reported paths into Pace Downloader-visible paths.
