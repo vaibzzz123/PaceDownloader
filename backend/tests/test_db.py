@@ -113,3 +113,33 @@ def test_invalid_qbt_polling_rate_env_falls_back_to_stored_value(monkeypatch, tm
         "value": 12,
         "env_override": False,
     }
+
+
+def test_download_lists_are_newest_first_with_deterministic_ties(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
+    db.initialize_db()
+
+    db.create_torrent_download("z-hash", name="Older")
+    db.create_torrent_download("b-hash", name="Newest B")
+    db.create_torrent_download("a-hash", name="Newest A")
+    db.create_episode_download(ep_id="9", crc32="00000009")
+    db.create_episode_download(ep_id="11", crc32="00000011")
+    db.create_episode_download(ep_id="100", crc32="00000100")
+
+    with db.get_db() as con:
+        con.execute("UPDATE torrent_download SET created_at = '2026-07-23 12:00:00' WHERE infohash = 'z-hash'")
+        con.execute("UPDATE torrent_download SET created_at = '2026-07-24 12:00:00' WHERE infohash IN ('a-hash', 'b-hash')")
+        con.execute("UPDATE episode_download SET created_at = '2026-07-23 12:00:00' WHERE ep_id = '9'")
+        con.execute("UPDATE episode_download SET created_at = '2026-07-24 12:00:00' WHERE ep_id IN ('11', '100')")
+        con.commit()
+
+    assert [torrent["infohash"] for torrent in db.get_all_torrent_downloads()] == [
+        "a-hash",
+        "b-hash",
+        "z-hash",
+    ]
+    assert [episode["ep_id"] for episode in db.get_all_episode_downloads()] == [
+        "100",
+        "11",
+        "9",
+    ]
