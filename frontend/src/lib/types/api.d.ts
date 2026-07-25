@@ -460,6 +460,8 @@ export interface components {
             torrent_infohash: string | null;
             /** Torrent Name */
             torrent_name: string | null;
+            /** Created At */
+            created_at: string;
         };
         /** EpisodeResponse */
         EpisodeResponse: {
@@ -658,6 +660,8 @@ export interface components {
             progress: number;
             /** Ep Ids */
             ep_ids?: number[];
+            /** Created At */
+            created_at: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -667,6 +671,10 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+            /** Input */
+            input?: unknown;
+            /** Context */
+            ctx?: Record<string, never>;
         };
     };
     responses: never;
