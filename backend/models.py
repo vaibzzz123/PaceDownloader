@@ -27,6 +27,7 @@ class EpisodeDownloadResponse(BaseModel):
     progress: float
     torrent_infohash: str | None
     torrent_name: str | None
+    created_at: str
 
 
 class ScanEpisodeInfo(BaseModel):
@@ -58,6 +59,7 @@ class TorrentDownloadResponse(BaseModel):
     status: str
     progress: float
     ep_ids: list[int] = Field(default_factory=list)
+    created_at: str
 
 
 class SettingField(BaseModel):

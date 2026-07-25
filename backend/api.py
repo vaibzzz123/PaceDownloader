@@ -156,6 +156,7 @@ def list_episode_downloads_route(dm: DownloadManager = Depends(get_download_mana
             progress=dl["progress"],
             torrent_infohash=dl["torrent_infohash"],
             torrent_name=dl["torrent_name"],
+            created_at=dl["created_at"],
         )
         for dl in dm.list_episode_downloads_with_progress()
     ]
@@ -170,6 +171,7 @@ def list_torrent_downloads_route(dm: DownloadManager = Depends(get_download_mana
             status=_STATUS_MAP.get(dl["status"], dl["status"]),
             progress=dl["progress"],
             ep_ids=dl["ep_ids"],
+            created_at=dl["created_at"],
         )
         for dl in dm.list_torrent_downloads_with_progress()
     ]
@@ -279,7 +281,14 @@ async def pause_torrent_route(infohash: str, dm: DownloadManager = Depends(get_d
         if sibling["status"] == "paused":
             downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": int(sibling["ep_id"]), "status": "paused"})
     ep_ids = [int(ep["ep_id"]) for ep in siblings]
-    return TorrentDownloadResponse(infohash=torrent["infohash"], name=torrent["name"] or torrent["infohash"], status=_STATUS_MAP.get(torrent["status"], torrent["status"]), progress=0.0, ep_ids=ep_ids)
+    return TorrentDownloadResponse(
+        infohash=torrent["infohash"],
+        name=torrent["name"] or torrent["infohash"],
+        status=_STATUS_MAP.get(torrent["status"], torrent["status"]),
+        progress=0.0,
+        ep_ids=ep_ids,
+        created_at=torrent["created_at"],
+    )
 
 
 @router.post("/torrent/{infohash}/resume", response_model=TorrentDownloadResponse)
@@ -295,7 +304,14 @@ async def resume_torrent_route(infohash: str, dm: DownloadManager = Depends(get_
         if sibling["status"] == "downloading":
             downloads_broadcaster.publish({"type": "episode_status_changed", "ep_id": int(sibling["ep_id"]), "status": "downloading"})
     ep_ids = [int(ep["ep_id"]) for ep in siblings]
-    return TorrentDownloadResponse(infohash=torrent["infohash"], name=torrent["name"] or torrent["infohash"], status=_STATUS_MAP.get(torrent["status"], torrent["status"]), progress=0.0, ep_ids=ep_ids)
+    return TorrentDownloadResponse(
+        infohash=torrent["infohash"],
+        name=torrent["name"] or torrent["infohash"],
+        status=_STATUS_MAP.get(torrent["status"], torrent["status"]),
+        progress=0.0,
+        ep_ids=ep_ids,
+        created_at=torrent["created_at"],
+    )
 
 
 @router.post("/season/{season_num}/download", response_model=list[EpisodeResponse])
