@@ -69,6 +69,9 @@ class FakeQbittorrentClient:
     def get_torrent_info(self, infohash: str) -> FakeTorrentInfo:
         return self.torrent_info
 
+    def get_torrents_info(self, infohashes: list[str]) -> dict:
+        return {}
+
 
 def test_download_episode_uses_release_resolver_crc32_and_magnet(monkeypatch, tmp_path):
     monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
@@ -127,6 +130,18 @@ def test_download_episode_uses_release_resolver_crc32_and_magnet(monkeypatch, tm
     assert episode_download["file_path_torrent"] == "/downloads/Fixture Release [DEADBEEF].mkv"
     assert episode_download["file_path_disk"] == "/media/Season 1/Fixture Release [DEADBEEF].mkv"
     assert episode_download["status"] == "downloading"
+
+
+def test_list_torrent_downloads_with_progress_includes_created_at(monkeypatch, tmp_path):
+    monkeypatch.setattr(db, "DB_PATH", str(tmp_path / "test.sqlite3"))
+    db.initialize_db()
+
+    infohash = "d" * 40
+    db.create_torrent_download(infohash, name="Fixture Torrent", status="downloading")
+
+    downloads = DownloadManager(FakeQbittorrentClient(infohash)).list_torrent_downloads_with_progress()
+
+    assert downloads[0]["created_at"] == db.get_torrent_download(infohash)["created_at"]
 
 
 def test_add_episode_to_data_location_syncs_media_metadata(monkeypatch, tmp_path):

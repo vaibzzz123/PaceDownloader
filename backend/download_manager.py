@@ -315,6 +315,7 @@ class DownloadManager:
                 "status": t["status"],
                 "progress": round(torrent_infos[t["infohash"]].progress * 100, 1) if t["infohash"] in torrent_infos else 0.0,
                 "ep_ids": [int(ep["ep_id"]) for ep in db.get_episode_downloads_by_torrent(t["infohash"])],
+                "created_at": t["created_at"],
             }
             for t in torrent_downloads
         ]
