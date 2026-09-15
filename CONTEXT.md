@@ -13,11 +13,11 @@ A numbered group of episodes belonging to exactly one **Edit**. Its identity is 
 _Avoid_: global season, fractional season
 
 **Edit Display Metadata Source**:
-An upstream, version-controlled repository that supplies Jellyfin display metadata such as NFO data and images for one or more **Edits**. It enriches the catalog but does not define which Edit Seasons or episodes exist or how they are downloaded.
+An upstream, version-controlled repository that supplies Jellyfin display metadata such as NFO data and images for exactly one **Edit**. Each built-in Edit names its own repository and expected content subdirectory. The source enriches the catalog but does not define which Edit Seasons or episodes exist or how they are downloaded.
 _Avoid_: catalog source, download source, metadata cache
 
 **Episode Key**:
-The stable identity of an episode, derived from its **Edit**, **Edit Season** number, and normalized integer episode number.
+The stable identity of an episode, canonically encoded as `<edit-id>:s<season-number>:e<normalized-episode-number>`, where the Edit identifier is a lowercase ASCII slug and both numbers are positive integers.
 _Avoid_: database row ID, globally enumerated episode ID
 
 **Normalized Episode Number**:
@@ -32,8 +32,16 @@ _Avoid_: separate episode, episode version, download source
 The download mechanism assigned to an **Episode Key**, such as torrent or Google Drive. Every Download Variant of that episode uses the same Episode Download Method.
 _Avoid_: Edit download method, variant download method
 
+**Episode Download State**:
+The provider-neutral lifecycle state of an Episode Key's requested Download Variant: queued, downloading, paused, finalizing, installed, or error. Provider-specific transfer details and the media finalization mechanism are separate attributes, not lifecycle states.
+_Avoid_: torrent state, copy status, hardlink status
+
+**Episode Download Progress**:
+The provider-neutral byte progress of an episode transfer, expressed as downloaded bytes and an optional total byte count. A percentage exists only when the total is known.
+_Avoid_: estimated percentage, torrent progress
+
 **Initial Setup**:
-The required configuration flow and backend restart completed before Pace Downloader can use media storage and qBittorrent.
+The required configuration flow and backend restart completed before Pace Downloader can use its enabled Edits. Media storage is always required; qBittorrent is required only when the enabled catalog contains torrent episodes.
 _Avoid_: first-run setup, setup wizard, setup flow
 
 **Restart Required**:
@@ -104,19 +112,41 @@ _Avoid_: media mapping, Jellyfin mapping
 - Edit Season numbers and **Normalized Episode Numbers** are integers everywhere in Pace Downloader.
 - An **Edit Spreadsheet Adapter** renumbers fractional or otherwise irregular source labels into a contiguous integer episode sequence.
 - The raw spreadsheet label does not become a second identity or a Jellyfin-only episode number.
+- Episode Keys use their canonical encoded string in persistence, APIs, routes, and events; database row identifiers are never exposed as episode identity.
 - One **Episode Key** may offer multiple **Download Variants**.
 - At most one **Download Variant** for an Episode Key is installed at a time.
 - Installing a different **Download Variant** replaces the currently installed media while preserving the **Episode Key** and its Jellyfin episode identity.
+- Requesting a different Download Variant supersedes any active transfer for the same Episode Key, discards only incompatible partial data, and preserves the installed variant until the requested replacement commits; repeating the same request is idempotent.
+- A global preference selects the extended Download Variant for bulk actions when one exists and otherwise selects the standard variant; an individual download request may explicitly override that choice.
 - An **Episode Key** has one **Episode Download Method**.
 - Every **Download Variant** under an Episode Key follows that episode's **Episode Download Method**.
+- The **Normalized Edit Catalog** groups an Episode Key's Download Variants and their provider-specific retrieval identifiers under a method-discriminated download definition, so one episode cannot contain variants for different Episode Download Methods.
 - Different episodes within the same **Edit** may use different **Episode Download Methods**.
+- An **Episode Download State** has the same meaning for torrent and direct-download Episode Download Methods.
+- An installed Download Variant is represented by the `installed` Episode Download State; copying, hardlinking, and atomic replacement describe how media was finalized, not additional states.
+- On process startup, queued, downloading, and finalizing Episode Download States are reconciled and recovered automatically; paused downloads remain paused, and error downloads require an explicit retry.
+- Pausing and resuming operate on one Episode Key without changing sibling episodes that happen to share a provider job; provider-job suspension is an optimization only when no managed episode in that job remains active.
+- Deleting an episode download removes its installed media, partial direct-download data, and tracking state. Transfer jobs and payloads created outside Pace Downloader are never deleted; Pace Downloader-created provider data is removed only after no tracked Episode Key references it.
+- Transient transfer failures receive bounded automatic retries with backoff before the Episode Download State becomes error; non-retryable validation failures become error immediately.
+- Retry preserves a valid partial download and the requested Download Variant, while a failed replacement never removes or overwrites the currently installed variant.
+- **Episode Download Progress** is determinate when a trustworthy total byte count is known and indeterminate otherwise; indeterminate progress reports transferred bytes without inventing a percentage.
+- Progress updates follow the shared polling cadence, while Episode Download State transitions and completed finalization are published immediately.
 - **Edit Display Metadata Sources** are maintained upstream from Pace Downloader and optionally enrich **Constructed Metadata** with Jellyfin display metadata.
-- **Initial Setup** configures the media storage location and qBittorrent connection used by Pace Downloader.
+- Each built-in Edit names its own Edit Display Metadata Source repository and expected content subdirectory.
+- An invalid Edit Display Metadata Source refresh never replaces that Edit's last working local snapshot.
+- Missing display metadata for one Edit does not remove or block that Edit's authoritative spreadsheet catalog; the Edit remains usable with fallback display values and a visible warning.
+- Replacing an installed Download Variant stages and validates the requested variant on the destination filesystem, commits the new installed path and variant before deleting the old media, and reconciles any brief duplicate after a crash.
+- **Initial Setup** configures the Media Data Location and any download dependencies required by the enabled catalog.
 - **Restart Required** occurs before **Initial Setup** is complete when setup was saved but not restarted.
 - **Restart Required** can also occur after **Initial Setup** when a changed **Restart-Applied Setting** has not been applied by a backend restart.
 - A changed **Restart-Applied Setting** creates **Restart Required**.
 - **Effective Setting** values decide whether **Initial Setup** has enough configuration; environment variables count.
 - **Media Data Location** is owned from Pace Downloader's filesystem perspective; Jellyfin may mount the same data at a different path.
+- Authoritative spreadsheet refreshes are atomic per Edit: failure preserves that Edit's last complete Normalized Edit Catalog without blocking successful refreshes for other Edits.
+- An enabled Edit with no valid catalog snapshot is unavailable independently and does not make other enabled Edits unavailable.
+- The **Media Data Location** is the shared parent of one stable show directory per enabled Edit; each show directory contains that Edit's season folders and media.
+- Disabling an Edit pauses its queued and downloading work but preserves its tracking state, installed media, and Managed Metadata Files; re-enabling does not resume that work automatically.
+- The set of enabled Edits is a Restart-Applied Setting; the effective catalog and download dependencies change together after restart.
 - **Episode Sheet Source Data** is the source of truth for the available Edit Seasons, episodes, and their download-source references.
 - Each supported spreadsheet format has an **Edit Spreadsheet Adapter**.
 - Every **Edit Spreadsheet Adapter** emits the same **Normalized Edit Catalog** schema.
